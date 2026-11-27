@@ -5,8 +5,8 @@
 
 const env = import.meta.env;
 
-export const supabaseUrl: string = String(env.VITE_SUPABASE_URL ?? '').trim();
-export const supabasePublishableKey: string = String(env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '').trim();
+export const supabaseUrl: string = String(env.VITE_SUPABASE_URL ?? 'https://moplevpqrcphrdvadabh.supabase.co').trim();
+export const supabasePublishableKey: string = String(env.VITE_SUPABASE_PUBLISHABLE_KEY ?? 'sb_publishable_N7fWXn1h-2Ba97qFeEWurA_rrzdVeMd').trim();
 
 /** False until a Supabase project URL and publishable key are added to .env.local. */
 export const isSupabaseConfigured: boolean = Boolean(supabaseUrl && supabasePublishableKey);
