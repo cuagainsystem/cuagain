@@ -1,31 +1,33 @@
 import { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
-import { House, Menu, Palette, X, type LucideIcon } from 'lucide-react';
-import { ROUTES } from '../../utils/routes';
+import { Link } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
+import { HOME_SECTIONS, ROUTES } from '../../utils/routes';
 import { LogoPlaceholder } from '../common/LogoPlaceholder';
+import { PortalButton } from '../common/PortalButton';
 import styles from './Navbar.module.css';
 
 type NavItem = {
   label: string;
   to: string;
-  icon: LucideIcon;
 };
 
-// Phase 2 adds the Student Web Portal button next to these links.
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Home', to: ROUTES.home, icon: House },
-  { label: 'Design system', to: ROUTES.designSystem, icon: Palette },
+  { label: 'How it works', to: HOME_SECTIONS.howItWorks },
+  { label: 'Guidelines', to: HOME_SECTIONS.guidelines },
+  { label: 'Claiming', to: HOME_SECTIONS.claiming },
+  { label: 'FAQs', to: HOME_SECTIONS.faqs },
 ];
 
 const MENU_ID = 'primary-navigation';
 
 export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
 
   return (
     <header className={styles.navbar}>
       <div className={`container ${styles.inner}`}>
-        <Link to={ROUTES.home} className={styles.brand} aria-label="CUAgain home">
+        <Link to={ROUTES.home} className={styles.brand} aria-label="CUAgain home" onClick={closeMenu}>
           <LogoPlaceholder size="md" />
         </Link>
 
@@ -42,14 +44,16 @@ export function Navbar() {
 
         <nav aria-label="Primary">
           <ul id={MENU_ID} className={styles.links} data-open={menuOpen}>
-            {NAV_ITEMS.map(({ label, to, icon: Icon }) => (
+            {NAV_ITEMS.map(({ label, to }) => (
               <li key={to}>
-                <NavLink to={to} end className={styles.link} onClick={() => setMenuOpen(false)}>
-                  <Icon aria-hidden="true" />
+                <Link to={to} className={styles.link} onClick={closeMenu}>
                   {label}
-                </NavLink>
+                </Link>
               </li>
             ))}
+            <li className={styles.portalItem} onClick={closeMenu}>
+              <PortalButton size="sm" />
+            </li>
           </ul>
         </nav>
       </div>

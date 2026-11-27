@@ -1,3 +1,4 @@
+import { BuildStatusSection } from './BuildStatusSection';
 import { ButtonsSection } from './ButtonsSection';
 import { ColorSection } from './ColorSection';
 import { DataDisplaySection } from './DataDisplaySection';
@@ -15,6 +16,7 @@ const SECTION_LINKS = [
   { id: 'forms', label: 'Form fields' },
   { id: 'data-display', label: 'Badges and cards' },
   { id: 'dialog', label: 'Dialog' },
+  { id: 'build-status', label: 'Build status' },
 ];
 
 /** Living documentation of the visual system. Every token and component is shown with its real styles. */
@@ -51,6 +53,7 @@ export function DesignSystemPage() {
         <FormsSection />
         <DataDisplaySection />
         <DialogSection />
+        <BuildStatusSection />
       </div>
     </div>
   );

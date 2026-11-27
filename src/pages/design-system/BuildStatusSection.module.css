@@ -1,0 +1,54 @@
+.list {
+  border-top: 1px solid var(--color-border);
+}
+
+.phase {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.number {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+}
+
+.title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.state svg {
+  width: 16px;
+  height: 16px;
+}
+
+.phase[data-state='done'] .number,
+.phase[data-state='done'] .state {
+  color: var(--color-success);
+}
+
+.phase[data-state='current'] .number,
+.phase[data-state='current'] .state {
+  color: var(--color-primary);
+}
+
+.phase[data-state='current'] .title,
+.phase[data-state='done'] .title {
+  color: var(--color-text);
+}
