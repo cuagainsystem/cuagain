@@ -3,7 +3,7 @@
 **Lost Something? Find It Again.**
 A web-based lost-and-found platform for Capitol University students.
 
-Current build: **Phase 2 (Landing page and authentication)**, on top of the Phase 1 foundation and design system.
+Current build: **Phase 3 (Database and user management)**, on top of Phase 2 (landing page and authentication) and Phase 1 (foundation and design system).
 
 ## Run it
 
@@ -21,6 +21,7 @@ Open the address shown in the terminal (usually http://localhost:5173). The land
 | `npm run build` | Type-check and create the production build |
 | `npm run preview` | Preview the production build |
 | `npm run lint` | Check the code for problems |
+| `npm run test:db` | Build a scratch local Postgres database and run the access-control tests (needs PostgreSQL installed) |
 
 ## Connect Supabase (one-time, about 10 minutes)
 
@@ -77,16 +78,16 @@ The roadmap says to **confirm the exact approved domain with the university befo
 VITE_SCHOOL_EMAIL_DOMAIN=g.cu.edu.ph
 ```
 
-Until then, registration still checks that the email prefix matches the student ID, but accepts any domain. Because this check runs in the browser, also enforce the domain on the server in Phase 3 (a database trigger or auth hook), otherwise it can be bypassed.
+Until then, registration still checks that the email prefix matches the student ID, but accepts any domain. Since Phase 3 the database enforces the domain too, see "Email domain, server side" below.
 
 ## Security notes
 
 - The browser only ever uses the publishable key. `.env.local` is git-ignored.
-- A user's role is **never** taken from sign-up data. In Phase 3, roles are assigned only on the server, so nobody can make themselves an admin.
+- A user's role is **never** taken from sign-up data. Roles are assigned only by the database, so nobody can make themselves an admin.
 - Registering an email that already exists looks the same as a new registration, and password reset always says "if an account exists", so the forms never reveal who has an account.
 - Raw server errors are never shown. Each one is mapped to a short, safe message.
 - The email address on the "check your email" page is passed in router state, not in the URL.
-- `ProtectedRoute` only controls what the screen shows. Real protection comes from Row Level Security in Phase 3.
+- `ProtectedRoute` only controls what the screen shows. Real protection comes from Row Level Security (Phase 3, below).
 - The terms of use in `src/pages/auth/TermsDialog.tsx` are a **draft**. Have the school approve the final wording before real users sign up.
 
 ## Design rules
@@ -108,17 +109,18 @@ src/
     cards/        ItemCard
     navigation/   AppLayout, Navbar, Footer, ScrollToHash
   config/         env.ts (public settings read from .env.local)
-  context/        AuthProvider (keeps the signed-in session in sync)
-  services/       supabaseClient, authService (every sign-in, sign-up and reset call)
+  context/        AuthProvider (keeps the session and the user's profile and role in sync)
+  services/       supabaseClient, authService (sign-in, sign-up, reset), profileService (profile and avatars)
   pages/
     landing/      HomePage and its sections
     auth/         Login, Register, VerifyEmail, ForgotPassword, ResetPassword, TermsDialog
-    portal/       PortalPage (placeholder)
+    portal/       PortalPage (placeholder, shows the profile and role from the database)
     design-system/
   hooks/          useAuth, useCooldown, useAuthLinkError, useCssVariableValue
   utils/          authSchemas, routes, redirect, categories, formatDate ...
 supabase/
-  migrations/     SQL migrations (Phase 3)
+  migrations/     SQL migrations 1 to 7 (Phase 3)
+  tests/          harness.sql, rls_tests.sql, run.sh (access-control tests)
   functions/      Edge Functions (Phase 6)
 ```
 
@@ -135,8 +137,94 @@ supabase/
 
 I tested every flow in a real browser against a simulated Supabase API: validation messages, the exact data sent on sign-up, redirects, session restore on reload, resend, reset and sign-out. I could not test against a live Supabase project from here. After you connect yours, try the full loop once: register, open the verification email, sign in, sign out, reset the password.
 
-## Before Phase 3
+## Phase 3: database and user management
 
-- Confirm the approved school email domain with the university.
-- Connect Supabase (above) and run the full loop once.
-- Phase 3 adds the database: the `profiles` table that receives the sign-up data, roles, and Row Level Security.
+Everything lives in `supabase/migrations`, in order. Nothing in the app needs to change when you apply them.
+
+### Apply the migrations (about 5 minutes)
+
+Easiest way, no tools needed:
+
+1. Open your Supabase project, then **SQL Editor, New query**.
+2. Open each file in `supabase/migrations`, in number order (`...000001` first, `...000007` last). Paste it in and click **Run**. Wait for "Success" before the next one.
+3. Open **Table Editor**. You should see 19 tables, and each one shows "RLS enabled".
+
+If you use the Supabase CLI instead: `supabase link`, then `supabase db push`.
+
+Run them on a fresh project. They create everything from scratch and are not meant to be run twice.
+
+### Make the first super admin (once)
+
+There is deliberately no button or sign-up trick that creates an administrator. Do it by hand:
+
+1. Register normally in the app and verify your email.
+2. In the SQL Editor run (use your own 7-digit student ID):
+   ```sql
+   update public.profile_private set role = 'super_admin' where student_id = '1234567';
+   ```
+3. Sign out and in again. The portal now shows "Super administrator".
+
+From then on a super admin promotes other people with the `set_user_role` function (the Phase 7 admin dashboard will have a screen for it).
+
+### Set the school email domain (when the university confirms it)
+
+```sql
+update public.app_settings set value = 'g.cu.edu.ph' where key = 'allowed_email_domain';
+```
+
+While the value is empty any domain is accepted (the email must still start with the student ID). Also set `VITE_SCHOOL_EMAIL_DOMAIN` in `.env.local` so the form warns people before they submit.
+
+### What the database stores
+
+| Table | Holds | Who can see it |
+| --- | --- | --- |
+| `profiles` | Username, user type, avatar | Every signed-in user |
+| `profile_private` | Student ID, email, role, account status | Only the owner and administrators |
+| `avatars` | The avatar choices | Everyone signed in |
+| `categories` | The 7 item categories | Everyone signed in |
+| `reports` | Lost and found reports | Everyone, except hidden ones (owner and admins only) |
+| `item_images` | Photo records (files go in Storage in Phase 4) | Public photos to everyone. ID photos only to the owner and admins |
+| `claims` | Ownership claims | The claimant and administrators only |
+| `claim_evidence` | Proof files for a claim | The claimant and administrators only |
+| `message_requests`, `conversations`, `conversation_members`, `messages` | Private chat | The two people in the chat only. Not even administrators |
+| `community_messages` | Community chat | Everyone signed in (admins can remove posts) |
+| `notifications` | Alerts | Each user sees their own |
+| `activity_logs`, `error_logs` | Audit trail and errors | Administrators read only. Nobody can edit or delete from the app |
+| `watchlist` | Categories a user follows | Each user sees their own |
+| `feedback` | Rating after a completed claim | The author and administrators |
+| `app_settings` | Rules such as the email domain | Super admins only |
+
+### How it stays secure, in plain English
+
+- **Every table has Row Level Security.** With no rule, nobody can read or write a row. Each rule says who gets in.
+- **Supabase opens new tables to everyone by default**, so every table first has all access removed and then gets back only what the app needs. Signed-out visitors can touch nothing.
+- **Public and private data are in separate tables.** Row Level Security works on whole rows, so student IDs and emails live in `profile_private`, which other users cannot read at all.
+- **Dangerous fields have no write access.** From the browser a user can change only their username and avatar. They cannot change their role, status, student ID, a report's status, or a claim's decision. Those happen only through database functions that first check who is calling.
+- **The role comes from the user type they pick at registration, never from sign-up data.** A hacked sign-up request that includes `"role": "super_admin"` is ignored (this is tested).
+- **Registration rules are enforced by the database**, not only the browser: username format, 7-digit student ID, email starts with the student ID, user type, no duplicates (usernames ignore upper/lower case), and the school domain once set. A sign-up that breaks a rule is refused as a whole.
+- **Suspended accounts** can still sign in and read, but cannot post, report, claim, message or edit. (Cutting off sign-in completely needs a server function, planned for Phase 7.)
+- **The last super admin cannot be removed**, so you cannot lock yourself out.
+- **Role changes, suspensions and moderation are written to `activity_logs`** by the database itself, so they cannot be skipped or forged.
+- **Claim rules:** only found items, not your own, not hidden, not already completed, one live claim per person per item, and only you and administrators see it. The person who found the item cannot see who claimed it or the evidence, so nobody can copy a claimant's proof.
+- **Photos of IDs are always private**, even if the upload asks for public.
+
+### Test it
+
+`npm run test:db` builds a scratch database, applies all migrations and runs **210 checks**. Each one pretends to be a real user (signed out, student, staff, administrator, super admin, suspended) and tries both allowed actions and attacks: reading someone else's claim, promoting yourself to admin, forging a log entry, posting while suspended, and so on. Every attack must be refused. The script needs PostgreSQL 15 or newer on your computer. It never touches your Supabase project.
+
+### Phase 3 completion check
+
+| Roadmap check | Status |
+| --- | --- |
+| Profiles, roles and permission tables exist | Done (migrations 1 to 7) |
+| Table access rules work as intended | Done, 210 automated checks pass on a local Postgres that imitates Supabase |
+| Unauthorized queries are refused | Done, covered by the same checks |
+| App reads the profile and role from the database | Done (`profileService`, `AuthProvider`, portal) |
+| Works on your real Supabase project | **Not yet verified.** Apply the migrations, then register, check the portal shows your username and role, and try the super admin step above |
+
+What is intentionally left for later phases: file storage rules (Phase 4, with the upload screens), the claim review actions approve, reject and complete (Phase 5), chat live updates (Phase 6), the admin screens and full sign-in blocking for suspended users (Phase 7).
+
+## Before Phase 4
+
+- Apply the migrations and run the checks above on your Supabase project.
+- Confirm the approved school email domain with the university and set it.

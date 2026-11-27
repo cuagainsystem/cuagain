@@ -45,6 +45,20 @@ function toFailure(error: AuthError): AuthResult {
   }
 }
 
+const REGISTRATION_REJECTED = fail(
+  'unknown',
+  "We could not create this account. The username or student ID may already be in use, or your details did not match the school's requirements.",
+);
+
+/*
+  When the database trigger refuses a sign-up (duplicate username or student ID, a rule the
+  browser check missed), Supabase answers with a plain HTTP 500 and no error code. Gateway
+  errors (502 and above) are real outages and keep the generic message.
+*/
+function isRejectedByDatabase(error: AuthError): boolean {
+  return error.status === 500 || error.code === 'unexpected_failure';
+}
+
 export type RegistrationInput = {
   username: string;
   studentId: string;
@@ -54,8 +68,8 @@ export type RegistrationInput = {
 };
 
 /*
-  The profile fields travel as sign-up metadata. In Phase 3 a database trigger copies them
-  into the `profiles` table. A user's role is NEVER taken from this metadata: roles are
+  The profile fields travel as sign-up metadata. A database trigger (migration 2) validates them
+  and copies them into the `profiles` and `profile_private` tables. A user's role is NEVER taken from this metadata: roles are
   assigned only on the server, so nobody can make themselves an administrator.
 */
 export async function registerAccount(input: RegistrationInput): Promise<AuthResult> {
@@ -74,6 +88,8 @@ export async function registerAccount(input: RegistrationInput): Promise<AuthRes
         },
       },
     });
+
+    if (error && isRejectedByDatabase(error)) return REGISTRATION_REJECTED;
 
     // An already-registered email is reported as success so the form never reveals who has an account.
     return error ? toFailure(error) : OK;
