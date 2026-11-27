@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 import { HOME_SECTIONS, ROUTES } from '../../utils/routes';
 import { LogoPlaceholder } from '../common/LogoPlaceholder';
 import { PortalButton } from '../common/PortalButton';
@@ -18,9 +19,16 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'FAQs', to: HOME_SECTIONS.faqs },
 ];
 
+/** Signed-in users get their working links. The landing page sections stay reachable from the footer. */
+const MEMBER_ITEMS: NavItem[] = [
+  { label: 'Browse', to: ROUTES.reports },
+  { label: 'My reports', to: ROUTES.myReports },
+];
+
 const MENU_ID = 'primary-navigation';
 
 export function Navbar() {
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
@@ -44,7 +52,7 @@ export function Navbar() {
 
         <nav aria-label="Primary">
           <ul id={MENU_ID} className={styles.links} data-open={menuOpen}>
-            {NAV_ITEMS.map(({ label, to }) => (
+            {(user ? MEMBER_ITEMS : NAV_ITEMS).map(({ label, to }) => (
               <li key={to}>
                 <Link to={to} className={styles.link} onClick={closeMenu}>
                   {label}

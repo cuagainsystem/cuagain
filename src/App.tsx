@@ -20,6 +20,13 @@ const ResetPasswordPage = lazy(() =>
   import('./pages/auth/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })),
 );
 const PortalPage = lazy(() => import('./pages/portal/PortalPage').then((m) => ({ default: m.PortalPage })));
+const BrowsePage = lazy(() => import('./pages/reports/BrowsePage').then((m) => ({ default: m.BrowsePage })));
+const MyReportsPage = lazy(() => import('./pages/reports/MyReportsPage').then((m) => ({ default: m.MyReportsPage })));
+const NewReportPage = lazy(() => import('./pages/reports/ReportFormPage').then((m) => ({ default: m.NewReportPage })));
+const EditReportPage = lazy(() => import('./pages/reports/ReportFormPage').then((m) => ({ default: m.EditReportPage })));
+const ReportDetailPage = lazy(() =>
+  import('./pages/reports/ReportDetailPage').then((m) => ({ default: m.ReportDetailPage })),
+);
 const DesignSystemPage = lazy(() =>
   import('./pages/design-system/DesignSystemPage').then((m) => ({ default: m.DesignSystemPage })),
 );
@@ -42,6 +49,11 @@ export default function App() {
         {/* Signed-in pages */}
         <Route element={<ProtectedRoute />}>
           <Route path={ROUTES.portal} element={<PortalPage />} />
+          <Route path={ROUTES.reports} element={<BrowsePage />} />
+          <Route path={ROUTES.myReports} element={<MyReportsPage />} />
+          <Route path="/reports/new/:type" element={<NewReportPage />} />
+          <Route path="/reports/:id/edit" element={<EditReportPage />} />
+          <Route path="/reports/:id" element={<ReportDetailPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

@@ -224,7 +224,41 @@ While the value is empty any domain is accepted (the email must still start with
 
 What is intentionally left for later phases: file storage rules (Phase 4, with the upload screens), the claim review actions approve, reject and complete (Phase 5), chat live updates (Phase 6), the admin screens and full sign-in blocking for suspended users (Phase 7).
 
-## Before Phase 4
+## Phase 4: reports, photos, search and dashboard
 
-- Apply the migrations and run the checks above on your Supabase project.
+Routes (all need sign-in):
+
+| Route | What it is |
+| --- | --- |
+| `/portal` | Dashboard: quick actions, your numbers, newest found and lost items, claims and notifications |
+| `/reports` | Browse and search every report |
+| `/my-reports` | Your own reports |
+| `/reports/new/lost`, `/reports/new/found` | Report forms |
+| `/reports/:id` | Report detail (owners can edit or delete while the report is open) |
+| `/reports/:id/edit` | Edit form |
+
+How it works:
+
+- **Search and filters** run in the database through the `search_reports` function (migration 8): type, category, location, date range, status, sort and paging. Filters live in the page address, so a search can be shared and the Back button behaves.
+- **Photos** are prepared in the browser first: re-encoded as JPEG (this removes location data from the picture), at most 1600 px wide, 5 MB, 5 per report. The storage bucket `item-images` is private; pictures are shown with short-lived signed links. Photos of IDs and cards (restricted categories) are never visible to other users.
+- **Reports can be changed only while open.** Once someone reviews a claim they are locked, enforced by the database and not only the screen.
+
+Migration 8 (`storage_and_search`) is applied to your Supabase project (`lost and found systen`). Run `npm run test:db` to re-check the access rules (250 checks).
+
+### Phase 4 completion check
+
+| Item | Status |
+| --- | --- |
+| Report lost and found items with photos | Done |
+| Browse, search, filter, sort, page | Done |
+| Edit and delete own open reports | Done |
+| Dashboard with live data | Done |
+| Automated checks | 130 browser checks (Phase 4), 76 (Phase 2 and 3), 250 database checks, all passing against a simulated Supabase |
+| Works end to end on your real project | **Not yet verified.** Create a report with a photo and confirm it appears in Browse |
+
+Left for later: claiming an item (Phase 5), admin report controls (Phase 7), search by photo (Phase 8, the button is already there but disabled), and cleanup of orphaned photo files.
+
+## Before Phase 5
+
+- Try the Phase 4 checklist above on your real project.
 - Confirm the approved school email domain with the university and set it.

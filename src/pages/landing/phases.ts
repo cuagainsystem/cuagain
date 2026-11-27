@@ -11,8 +11,8 @@ export type RoadmapPhase = {
 export const ROADMAP_PHASES: RoadmapPhase[] = [
   { number: 1, title: 'Foundation and design system', group: 'Essential', state: 'done' },
   { number: 2, title: 'Landing page and authentication', group: 'Essential', state: 'done' },
-  { number: 3, title: 'Database, profiles and roles', group: 'Essential', state: 'current' },
-  { number: 4, title: 'Reports, search and filters', group: 'Essential', state: 'upcoming' },
+  { number: 3, title: 'Database, profiles and roles', group: 'Essential', state: 'done' },
+  { number: 4, title: 'Reports, search and filters', group: 'Essential', state: 'current' },
   { number: 5, title: 'Claims and item recovery', group: 'Essential', state: 'upcoming' },
   { number: 6, title: 'Chat and notifications', group: 'Second', state: 'upcoming' },
   { number: 7, title: 'Admin dashboard and monitoring', group: 'Second', state: 'upcoming' },

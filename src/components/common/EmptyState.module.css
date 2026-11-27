@@ -1,0 +1,44 @@
+.state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-5);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  text-align: center;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-raised-sm);
+  color: var(--color-primary);
+}
+
+.icon svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 1.6;
+}
+
+.error .icon {
+  color: var(--color-danger);
+}
+
+.title {
+  font-size: var(--text-xl);
+}
+
+.text {
+  max-width: 44ch;
+  color: var(--color-text-muted);
+}
+
+.action {
+  margin-top: var(--space-2);
+}

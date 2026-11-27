@@ -631,6 +631,98 @@ begin
 end $$;
 
 -- ===================================================================================
+-- 6b. Search and photo files (Phase 4)
+-- ===================================================================================
+do $$
+declare alice uuid := t.u('2024001'); bob uuid := t.u('2024002'); adm uuid := t.u('2024005');
+        v_elec uuid := (select id from public.categories where slug = 'electronics');
+begin
+  perform t.as_user(bob);
+  perform t.ok('search: no filters returns every visible report', t.rows('select 1 from public.search_reports(p_limit => 50)') = 5);
+  perform t.ok('search: keyword matches the title', t.rows($q$select 1 from public.search_reports('clothing')$q$) = 1);
+  perform t.ok('search: keyword matching ignores capitals', t.rows($q$select 1 from public.search_reports('CLOTHING')$q$) = 1);
+  perform t.ok('search: keyword also searches the description', t.rows($q$select 1 from public.search_reports('long enough', p_limit => 50)$q$) = 5);
+  perform t.ok('search: a typed percent sign is not a wildcard', t.rows($q$select 1 from public.search_reports('%')$q$) = 0);
+  perform t.ok('search: a typed underscore is not a wildcard', t.rows($q$select 1 from public.search_reports('_')$q$) = 0);
+  perform t.ok('search: SQL injection attempt finds nothing', t.rows($q$select 1 from public.search_reports($s$'; drop table public.reports; --$s$)$q$) = 0);
+  perform t.ok('search: reports table still exists after the injection attempt', to_regclass('public.reports') is not null);
+  perform t.ok('search: filter by type', t.rows($q$select 1 from public.search_reports(p_type => 'found', p_limit => 50)$q$) = 4);
+  perform t.ok('search: filter by status', t.rows($q$select 1 from public.search_reports(p_status => 'completed')$q$) = 1);
+  perform t.ok('search: filter by category', t.rows(format($q$select 1 from public.search_reports(p_category_id => %L, p_limit => 50)$q$, v_elec)) = 3);
+  perform t.ok('search: filter by location', t.rows($q$select 1 from public.search_reports(p_location => 'lib', p_limit => 50)$q$) = 5);
+  perform t.ok('search: location with no match', t.rows($q$select 1 from public.search_reports(p_location => 'zzz')$q$) = 0);
+  perform t.ok('search: date range excludes future dates', t.rows($q$select 1 from public.search_reports(p_from => current_date + 5)$q$) = 0);
+  perform t.ok('search: date range includes today', t.rows($q$select 1 from public.search_reports(p_from => current_date, p_to => current_date, p_limit => 50)$q$) = 5);
+  perform t.ok('search: mine shows only my reports', t.rows($q$select 1 from public.search_reports(p_mine => true, p_limit => 50)$q$) = 2);
+  perform t.ok('search: page size is respected', t.rows($q$select 1 from public.search_reports(p_limit => 2)$q$) = 2);
+  perform t.ok('search: total count covers all pages', (select max(total_count) from public.search_reports(p_limit => 2)) = 5);
+  perform t.ok('search: second page works', t.rows($q$select 1 from public.search_reports(p_limit => 2, p_offset => 4)$q$) = 1);
+  perform t.ok('search: page size is capped at 50', t.rows($q$select 1 from public.search_reports(p_limit => 100000)$q$) <= 50);
+  perform t.ok('search: public photo path is returned',
+    (select image_path from public.search_reports(p_category_id => v_elec, p_type => 'found', p_limit => 50) where id = 'b0000000-0000-0000-0000-000000000003') = 'a/1.jpg');
+  perform t.ok('search: ID photo path is never returned',
+    (select image_path from public.search_reports(p_limit => 50) where id = 'b0000000-0000-0000-0000-000000000004') is null);
+  perform t.back();
+
+  perform t.as_user(alice);
+  perform t.ok('search: not even the owner gets their ID photo in listings',
+    (select image_path from public.search_reports(p_limit => 50) where id = 'b0000000-0000-0000-0000-000000000004') is null);
+  perform t.ok('search: mine shows the owner their own', t.rows($q$select 1 from public.search_reports(p_mine => true, p_limit => 50)$q$) = 3);
+  perform t.back();
+
+  perform t.as_user(adm);
+  perform t.works('search: admin hides a report', $q$select public.admin_set_report_hidden('b0000000-0000-0000-0000-000000000005', true)$q$);
+  perform t.back();
+  perform t.as_user(alice);
+  perform t.ok('search: hidden reports are left out for other users', t.rows('select 1 from public.search_reports(p_limit => 50)') = 4);
+  perform t.back();
+  perform t.as_user(bob);
+  perform t.ok('search: hidden reports still show for their owner', t.rows('select 1 from public.search_reports(p_limit => 50)') = 5);
+  perform t.back();
+  perform t.as_user(adm);
+  perform t.works('search: admin unhides it', $q$select public.admin_set_report_hidden('b0000000-0000-0000-0000-000000000005', false)$q$);
+  perform t.back();
+
+  perform t.as_anon();
+  perform t.err('anon: cannot search reports', 'select * from public.search_reports()', '42501');
+  perform t.back();
+
+  -- Photo files
+  insert into storage.buckets (id, name, public) values ('item-images', 'item-images', false) on conflict do nothing;
+  insert into storage.objects (bucket_id, name) values
+    ('item-images', 'a/1.jpg'), ('item-images', 'a/id.jpg'), ('item-images', 'a/orphan.jpg');
+  insert into storage.objects (bucket_id, name) values ('item-images', alice::text || '/mine.jpg');
+
+  perform t.as_user(bob);
+  perform t.ok('files: others can open a public photo', t.rows($q$select 1 from storage.objects where name = 'a/1.jpg'$q$) = 1);
+  perform t.ok('files: others can NOT open an ID photo', t.rows($q$select 1 from storage.objects where name = 'a/id.jpg'$q$) = 0);
+  perform t.ok('files: a file with no database record is not readable by others', t.rows($q$select 1 from storage.objects where name = 'a/orphan.jpg'$q$) = 0);
+  perform t.works('files: upload into your own folder',
+    format($q$insert into storage.objects (bucket_id, name) values ('item-images', %L)$q$, bob::text || '/r5/new.jpg'));
+  perform t.err('files: cannot upload into someone else''s folder',
+    format($q$insert into storage.objects (bucket_id, name) values ('item-images', %L)$q$, alice::text || '/r1/evil.jpg'), '42501');
+  perform t.err('files: cannot upload to another bucket',
+    format($q$insert into storage.objects (bucket_id, name) values ('other', %L)$q$, bob::text || '/x.jpg'));
+  perform t.ok('files: cannot delete someone else''s file',
+    t.affected(format($q$delete from storage.objects where name = %L$q$, alice::text || '/mine.jpg')) = 0);
+  perform t.back();
+
+  perform t.as_user(alice);
+  perform t.ok('files: the owner can open their ID photo', t.rows($q$select 1 from storage.objects where name = 'a/id.jpg'$q$) = 1);
+  perform t.ok('files: owner can delete their own file',
+    t.affected(format($q$delete from storage.objects where name = %L$q$, alice::text || '/mine.jpg')) = 1);
+  perform t.back();
+
+  perform t.as_user(adm);
+  perform t.ok('files: admin can open an ID photo', t.rows($q$select 1 from storage.objects where name = 'a/id.jpg'$q$) = 1);
+  perform t.back();
+
+  perform t.as_anon();
+  perform t.ok('anon: cannot see any files', t.rows('select 1 from storage.objects') = 0);
+  perform t.back();
+end $$;
+
+-- ===================================================================================
 -- 7. Structural guarantees
 -- ===================================================================================
 do $$
@@ -658,7 +750,7 @@ begin
        'set_user_role', 'set_account_status',
        'admin_set_report_status', 'admin_set_report_hidden',
        'cancel_my_claim', 'is_conversation_member', 'respond_to_message_request',
-       'admin_remove_community_message');
+       'admin_remove_community_message', 'search_reports');
   perform t.ok('structure: signed-in users can run only the approved functions (extra: ' || coalesce(v_missing, 'none') || ')', v_missing is null);
 
   perform t.ok('structure: no signed-in user can delete rows from a log table',
