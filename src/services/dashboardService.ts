@@ -1,3 +1,4 @@
+import type { ClaimStatus } from '../types/claim';
 import type { ListedReport, ReportStatus } from '../types/report';
 import { EMPTY_FILTERS } from '../types/report';
 import { failure, GENERIC_FAILURE, NOT_CONFIGURED, success, type Result } from './result';
@@ -5,15 +6,6 @@ import { searchReports } from './reportService';
 import { supabase } from './supabaseClient';
 
 export type MyReportSummary = { total: number; open: number; byStatus: Record<ReportStatus, number> };
-
-export type ClaimStatus =
-  | 'pending'
-  | 'under_review'
-  | 'more_info_required'
-  | 'approved'
-  | 'rejected'
-  | 'completed'
-  | 'cancelled';
 
 export type MyClaim = { id: string; status: ClaimStatus; createdAt: string; reportTitle: string };
 
@@ -49,13 +41,14 @@ async function loadSummary(userId: string): Promise<Result<MyReportSummary>> {
   }
 }
 
-async function loadClaims(): Promise<Result<MyClaim[]>> {
+async function loadClaims(userId: string): Promise<Result<MyClaim[]>> {
   if (!supabase) return NOT_CONFIGURED;
   try {
-    // Row Level Security already limits this to the signed-in user's own claims.
+    // Administrators can see every claim, so this asks for the user's own explicitly.
     const { data, error } = await supabase
       .from('claims')
       .select('id, status, created_at, reports(title)')
+      .eq('claimant_id', userId)
       .order('created_at', { ascending: false })
       .limit(5);
     if (error) return GENERIC_FAILURE;
@@ -109,10 +102,20 @@ async function loadRecent(type: 'lost' | 'found'): Promise<Result<ListedReport[]
 export async function loadDashboard(userId: string): Promise<DashboardData> {
   const [summary, claims, recentFound, recentLost, notifications] = await Promise.all([
     loadSummary(userId),
-    loadClaims(),
+    loadClaims(userId),
     loadRecent('found'),
     loadRecent('lost'),
     loadNotifications(),
   ]);
   return { summary, claims, recentFound, recentLost, notifications };
+}
+
+/** Marks one notification as read. Failing quietly is fine: it only affects the unread dot. */
+export async function markNotificationRead(id: string): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+  } catch {
+    // Nothing to do. The notification simply stays marked as unread.
+  }
 }

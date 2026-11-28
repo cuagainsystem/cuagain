@@ -1,5 +1,6 @@
 import { lazy } from 'react';
 import { Route, Routes } from 'react-router-dom';
+import { AdminRoute } from './components/auth/AdminRoute';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppLayout } from './components/navigation/AppLayout';
 import { HomePage } from './pages/landing/HomePage';
@@ -21,6 +22,11 @@ const ResetPasswordPage = lazy(() =>
 );
 const PortalPage = lazy(() => import('./pages/portal/PortalPage').then((m) => ({ default: m.PortalPage })));
 const BrowsePage = lazy(() => import('./pages/reports/BrowsePage').then((m) => ({ default: m.BrowsePage })));
+const ClaimFormPage = lazy(() => import('./pages/claims/ClaimFormPage').then((m) => ({ default: m.ClaimFormPage })));
+const ClaimDetailPage = lazy(() => import('./pages/claims/ClaimDetailPage').then((m) => ({ default: m.ClaimDetailPage })));
+const AdminClaimDetailPage = lazy(() => import('./pages/claims/ClaimDetailPage').then((m) => ({ default: m.AdminClaimDetailPage })));
+const MyClaimsPage = lazy(() => import('./pages/claims/MyClaimsPage').then((m) => ({ default: m.MyClaimsPage })));
+const AdminClaimsPage = lazy(() => import('./pages/admin/AdminClaimsPage').then((m) => ({ default: m.AdminClaimsPage })));
 const MyReportsPage = lazy(() => import('./pages/reports/MyReportsPage').then((m) => ({ default: m.MyReportsPage })));
 const NewReportPage = lazy(() => import('./pages/reports/ReportFormPage').then((m) => ({ default: m.NewReportPage })));
 const EditReportPage = lazy(() => import('./pages/reports/ReportFormPage').then((m) => ({ default: m.EditReportPage })));
@@ -53,7 +59,14 @@ export default function App() {
           <Route path={ROUTES.myReports} element={<MyReportsPage />} />
           <Route path="/reports/new/:type" element={<NewReportPage />} />
           <Route path="/reports/:id/edit" element={<EditReportPage />} />
+          <Route path="/reports/:id/claim" element={<ClaimFormPage />} />
           <Route path="/reports/:id" element={<ReportDetailPage />} />
+          <Route path={ROUTES.myClaims} element={<MyClaimsPage />} />
+          <Route path="/claims/:id" element={<ClaimDetailPage />} />
+          <Route element={<AdminRoute />}>
+            <Route path={ROUTES.adminClaims} element={<AdminClaimsPage />} />
+            <Route path="/admin/claims/:id" element={<AdminClaimDetailPage />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

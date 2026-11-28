@@ -258,7 +258,63 @@ Migration 8 (`storage_and_search`) is applied to your Supabase project (`lost an
 
 Left for later: claiming an item (Phase 5), admin report controls (Phase 7), search by photo (Phase 8, the button is already there but disabled), and cleanup of orphaned photo files.
 
-## Before Phase 5
+## Phase 5: claims and item recovery
 
-- Try the Phase 4 checklist above on your real project.
+How a claim moves:
+
+```
+Pending -> Under review -> Approved -> Completed          (item handed over)
+Pending / Under review -> More information required -> Pending (claimant answers)
+Pending / Under review / More information / Approved -> Rejected   (administrator)
+Pending / Under review / More information / Approved -> Cancelled  (claimant withdraws)
+```
+
+Routes (all need sign-in):
+
+| Route | Who | What it is |
+| --- | --- | --- |
+| `/reports/:id/claim` | Any member except the finder | Send a claim: explanation plus up to 5 proof files |
+| `/claims` | Claimant | Your claims |
+| `/claims/:id` | Claimant | Status, the administrator's note, progress timeline, proof, cancel, answer questions |
+| `/admin/claims` | Administrators | Review queue (oldest first) with filters |
+| `/admin/claims/:id` | Administrators | Claimant details, proof, review tools, handover |
+
+Rules enforced by the database (migration 9), not only the screens:
+
+- Only administrators review claims, and never their own. Approval and handover are separate steps, so an item is only marked returned after an administrator confirms it was physically handed over.
+- Approving needs a written note (where and when to collect). Rejecting and asking for more information need a note too.
+- Only one claim per item can be approved. When a handover is confirmed, the report closes and every other open claim on it is rejected automatically.
+- A new claim does not lock the finder's report. It locks only when an administrator starts a review, so nobody can freeze someone's report by sending claims.
+- A finder cannot delete a report that has live claims.
+- Every status change is written to the claim history (who, when, from, to, note) and the activity log, and people are notified: claimants about each decision, administrators about new claims and answers, the finder when the item is returned.
+- Proof files live in the private `claim-evidence` bucket (JPG, PNG, WebP, PDF; 10 MB). Only the claimant and administrators can open them. Once attached, a file cannot be deleted from the app.
+- Hardening added in the same migration: a photo or evidence record can only point at a file inside its own owner and item folder. Without this, a crafted record could have been used to read someone else's file.
+
+Migration 9 (`claims_workflow`) is applied to your Supabase project. `npm run test:db` now runs 317 checks.
+
+### Phase 5 completion check
+
+| Item | Status |
+| --- | --- |
+| Send a claim with an explanation and proof | Done |
+| Claim list and detail with progress timeline | Done |
+| Administrator queue, review, approve, reject, ask for more information | Done |
+| Handover confirmation closes the report | Done |
+| Cancel a claim, answer a request for information | Done |
+| Notifications link to the claim | Done |
+| Automated checks | 90 browser checks (Phase 5), 130 (Phase 4), 76 (Phase 2 and 3), 317 database checks, all passing against a simulated Supabase |
+| Works end to end on your real project | **Not yet verified.** See the checklist below |
+
+Try on your real project (you need two accounts, one made administrator):
+
+1. Account A reports a found item. Account B sends a claim with one photo and one PDF.
+2. As the administrator, open Review claims, start the review, ask for more information, answer as B, approve with a note, then confirm the handover.
+3. Check B was notified at each step and the item shows as returned.
+
+Left for later: feedback after a completed claim (the table exists), email notifications (Phase 6 with Brevo), the full administrator dashboard (Phase 7), search by photo (Phase 8), and cleanup of orphaned files.
+
+## Before Phase 6
+
+- Run the checklist above on your real project.
+- Create a Brevo account and sender address for email notifications.
 - Confirm the approved school email domain with the university and set it.

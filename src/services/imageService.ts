@@ -10,12 +10,12 @@ const SIGNED_URL_SECONDS = 60 * 60;
   The bucket is private, so a photo is shown through a temporary signed link. Storage only
   creates the link if the signed-in user is allowed to see that photo's database row.
 */
-export async function signPaths(paths: string[]): Promise<Map<string, string>> {
+export async function signPaths(paths: string[], bucket: string = IMAGE_BUCKET): Promise<Map<string, string>> {
   const urls = new Map<string, string>();
   if (!supabase || paths.length === 0) return urls;
 
   try {
-    const { data } = await supabase.storage.from(IMAGE_BUCKET).createSignedUrls(paths, SIGNED_URL_SECONDS);
+    const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, SIGNED_URL_SECONDS);
     for (const entry of data ?? []) {
       if (entry.path && entry.signedUrl && !entry.error) urls.set(entry.path, entry.signedUrl);
     }

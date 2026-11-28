@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
+import { isAdminRole } from '../../types/database';
 import { useAuth } from '../../hooks/useAuth';
 import { HOME_SECTIONS, ROUTES } from '../../utils/routes';
 import { LogoPlaceholder } from '../common/LogoPlaceholder';
@@ -23,12 +24,15 @@ const NAV_ITEMS: NavItem[] = [
 const MEMBER_ITEMS: NavItem[] = [
   { label: 'Browse', to: ROUTES.reports },
   { label: 'My reports', to: ROUTES.myReports },
+  { label: 'My claims', to: ROUTES.myClaims },
 ];
+
+const ADMIN_ITEM: NavItem = { label: 'Review claims', to: ROUTES.adminClaims };
 
 const MENU_ID = 'primary-navigation';
 
 export function Navbar() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
@@ -52,7 +56,7 @@ export function Navbar() {
 
         <nav aria-label="Primary">
           <ul id={MENU_ID} className={styles.links} data-open={menuOpen}>
-            {(user ? MEMBER_ITEMS : NAV_ITEMS).map(({ label, to }) => (
+            {(user ? (isAdminRole(profile?.role) ? [...MEMBER_ITEMS, ADMIN_ITEM] : MEMBER_ITEMS) : NAV_ITEMS).map(({ label, to }) => (
               <li key={to}>
                 <Link to={to} className={styles.link} onClick={closeMenu}>
                   {label}

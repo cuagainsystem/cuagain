@@ -331,18 +331,18 @@ begin
   -- Images
   perform t.as_user(alice);
   perform t.works('images: owner adds a photo',
-    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000003', auth.uid(), 'a/1.jpg', 'image/jpeg', 1000)$q$);
+    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000003', auth.uid(), auth.uid()::text || '/b0000000-0000-0000-0000-000000000003/1.jpg', 'image/jpeg', 1000)$q$);
   perform t.works('images: owner adds a photo to an ID report, asking for it to be public',
-    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes, is_public) values ('b0000000-0000-0000-0000-000000000004', auth.uid(), 'a/id.jpg', 'image/jpeg', 1000, true)$q$);
+    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes, is_public) values ('b0000000-0000-0000-0000-000000000004', auth.uid(), auth.uid()::text || '/b0000000-0000-0000-0000-000000000004/id.jpg', 'image/jpeg', 1000, true)$q$);
   perform t.err('images: wrong file type refused',
-    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000003', auth.uid(), 'a/x.exe', 'application/x-msdownload', 1000)$q$, '23514');
+    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000003', auth.uid(), auth.uid()::text || '/b0000000-0000-0000-0000-000000000003/x.exe', 'application/x-msdownload', 1000)$q$, '23514');
   perform t.err('images: file over 5 MB refused',
-    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000003', auth.uid(), 'a/big.jpg', 'image/jpeg', 6000000)$q$, '23514');
+    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000003', auth.uid(), auth.uid()::text || '/b0000000-0000-0000-0000-000000000003/big.jpg', 'image/jpeg', 6000000)$q$, '23514');
   perform t.works('images: photos 2 to 5',
     $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes)
-       select 'b0000000-0000-0000-0000-000000000003', auth.uid(), 'a/n' || g || '.jpg', 'image/jpeg', 1000 from generate_series(2, 5) g$q$);
+       select 'b0000000-0000-0000-0000-000000000003', auth.uid(), auth.uid()::text || '/b0000000-0000-0000-0000-000000000003/n' || g || '.jpg', 'image/jpeg', 1000 from generate_series(2, 5) g$q$);
   perform t.err('images: a sixth photo is refused',
-    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000003', auth.uid(), 'a/6.jpg', 'image/jpeg', 1000)$q$, '23514');
+    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000003', auth.uid(), auth.uid()::text || '/b0000000-0000-0000-0000-000000000003/6.jpg', 'image/jpeg', 1000)$q$, '23514');
   perform t.ok('images: the owner sees their ID photo', t.rows($q$select 1 from public.item_images where report_id = 'b0000000-0000-0000-0000-000000000004'$q$) = 1);
   perform t.back();
 
@@ -350,7 +350,7 @@ begin
   perform t.ok('images: others see public photos', t.rows($q$select 1 from public.item_images where report_id = 'b0000000-0000-0000-0000-000000000003'$q$) = 5);
   perform t.ok('images: others NEVER see photos of IDs', t.rows($q$select 1 from public.item_images where report_id = 'b0000000-0000-0000-0000-000000000004'$q$) = 0);
   perform t.err('images: cannot attach a photo to someone else''s report',
-    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000001', auth.uid(), 'b/1.jpg', 'image/jpeg', 1000)$q$, '42501');
+    $q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values ('b0000000-0000-0000-0000-000000000001', auth.uid(), auth.uid()::text || '/b0000000-0000-0000-0000-000000000001/1.jpg', 'image/jpeg', 1000)$q$, '42501');
   perform t.ok('images: cannot delete someone else''s photo',
     t.affected($q$delete from public.item_images where report_id = 'b0000000-0000-0000-0000-000000000003'$q$) = 0);
   perform t.back();
@@ -360,7 +360,7 @@ begin
   perform t.back();
 
   perform t.ok('images: ID photo was forced to private by the database',
-    (select not is_public from public.item_images where storage_path = 'a/id.jpg'));
+    (select not is_public from public.item_images where storage_path like '%/b0000000-0000-0000-0000-000000000004/id.jpg'));
 
   -- Categories
   perform t.as_user(alice);
@@ -411,9 +411,9 @@ begin
   perform t.ok('claims: claimant can add detail to the explanation',
     t.affected($q$update public.claims set explanation = 'It has a green case, a crack and a sticker.' where id = 'c0000000-0000-0000-0000-000000000001'$q$) = 1);
   perform t.works('evidence: claimant attaches evidence',
-    $q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('c0000000-0000-0000-0000-000000000001', auth.uid(), 'ev/1.jpg', 'image/jpeg', 2000)$q$);
+    $q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('c0000000-0000-0000-0000-000000000001', auth.uid(), auth.uid()::text || '/c0000000-0000-0000-0000-000000000001/1.jpg', 'image/jpeg', 2000)$q$);
   perform t.err('evidence: file type restricted',
-    $q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('c0000000-0000-0000-0000-000000000001', auth.uid(), 'ev/2.zip', 'application/zip', 2000)$q$, '23514');
+    $q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('c0000000-0000-0000-0000-000000000001', auth.uid(), auth.uid()::text || '/c0000000-0000-0000-0000-000000000001/2.zip', 'application/zip', 2000)$q$, '23514');
   perform t.back();
 
   perform t.as_user(carol);
@@ -422,7 +422,7 @@ begin
   perform t.ok('claims: a claimant sees only their own claims', t.rows('select 1 from public.claims') = 1);
   perform t.ok('evidence: others cannot see claim evidence', t.rows('select 1 from public.claim_evidence') = 0);
   perform t.err('evidence: cannot attach evidence to someone else''s claim',
-    $q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('c0000000-0000-0000-0000-000000000001', auth.uid(), 'ev/c.jpg', 'image/jpeg', 2000)$q$, '42501');
+    $q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('c0000000-0000-0000-0000-000000000001', auth.uid(), auth.uid()::text || '/c0000000-0000-0000-0000-000000000001/c.jpg', 'image/jpeg', 2000)$q$, '42501');
   perform t.ok('claims: cannot edit someone else''s claim',
     t.affected($q$update public.claims set explanation = 'Taking over this claim.' where id = 'c0000000-0000-0000-0000-000000000001'$q$) = 0);
   perform t.ok('claims: cannot delete a claim', true);
@@ -492,6 +492,181 @@ begin
   perform t.err('anon: cannot read claims', 'select * from public.claims', '42501');
   perform t.err('anon: cannot read evidence', 'select * from public.claim_evidence', '42501');
   perform t.back();
+end $$;
+
+-- ===================================================================================
+-- 4b. Claim review and handover workflow (Phase 5)
+-- ===================================================================================
+do $$
+declare alice uuid := t.u('2024001'); bob uuid := t.u('2024002'); carol uuid := t.u('2024003');
+        dave uuid := t.u('2024004'); adm uuid := t.u('2024005');
+        f1 uuid := 'd0000000-0000-0000-0000-000000000001'; f2 uuid := 'd0000000-0000-0000-0000-000000000002';
+        v_ev text;
+begin
+  delete from public.notifications;
+  perform t.mkreport(f1, bob, 'found', 'electronics');
+  perform t.mkreport(f2, bob, 'found', 'electronics');
+
+  perform t.as_user(alice);
+  perform t.works('flow: alice claims item 1',
+    $q$insert into public.claims (id, report_id, claimant_id, explanation) values ('e0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001', auth.uid(), 'Green case with a crack on the corner.')$q$);
+  perform t.ok('flow: the claim starts with one history entry', t.rows($q$select 1 from public.claim_events where claim_id = 'e0000000-0000-0000-0000-000000000001'$q$) = 1);
+  perform t.err('flow: history cannot be written from the app', format($q$insert into public.claim_events (claim_id, to_status) values ('e0000000-0000-0000-0000-000000000001', 'approved')$q$), '42501');
+  perform t.err('flow: alice cannot approve her own claim', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000001', 'approved', 'Approving myself')$q$, '42501');
+  perform t.err('flow: alice cannot complete her own claim', $q$select public.admin_complete_claim('e0000000-0000-0000-0000-000000000001')$q$, '42501');
+  perform t.back();
+
+  perform t.as_user(carol);
+  perform t.works('flow: carol also claims item 1',
+    $q$insert into public.claims (id, report_id, claimant_id, explanation) values ('e0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001', auth.uid(), 'It has my name sticker under the lid.')$q$);
+  perform t.back();
+  perform t.as_user(dave);
+  perform t.works('flow: dave claims item 1 too',
+    $q$insert into public.claims (id, report_id, claimant_id, explanation) values ('e0000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000001', auth.uid(), 'Mine, I know the lock screen picture.')$q$);
+  perform t.works('flow: dave claims item 2',
+    $q$insert into public.claims (id, report_id, claimant_id, explanation) values ('e0000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000002', auth.uid(), 'Black charger with a blue tape on it.')$q$);
+  perform t.back();
+
+  perform t.ok('flow: a new claim does not lock the report', (select status = 'open' from public.reports where id = f1));
+
+  perform t.as_user(bob);
+  perform t.ok('flow: the finder cannot delete an item that has claims',
+    t.affected($q$delete from public.reports where id = 'd0000000-0000-0000-0000-000000000002'$q$) = 0);
+  perform t.ok('flow: the finder sees no claims or history', t.rows('select 1 from public.claims') = 0 and t.rows('select 1 from public.claim_events') = 0);
+  perform t.err('flow: the finder cannot review claims', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000001', 'approved', 'I am the finder')$q$, '42501');
+  perform t.back();
+
+  perform t.as_user(adm);
+  perform t.ok('flow: administrators are told about new claims', t.rows($q$select 1 from public.notifications where type = 'claim_submitted'$q$) = 4);
+  perform t.works('flow: admin files a claim of their own', $q$insert into public.claims (id, report_id, claimant_id, explanation) values ('e0000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-000000000002', auth.uid(), 'Testing the own-claim rule here.')$q$);
+  perform t.err('flow: admin cannot review their own claim', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000004', 'approved', 'Looks good to me')$q$, '42501');
+  perform t.err('flow: admin cannot hand over their own claim', $q$select public.admin_complete_claim('e0000000-0000-0000-0000-000000000004')$q$, '42501');
+  perform t.err('flow: a pending claim cannot be completed', $q$select public.admin_complete_claim('e0000000-0000-0000-0000-000000000005')$q$, '23514');
+  perform t.err('flow: approving needs a note', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000001', 'approved')$q$, '23514');
+  perform t.err('flow: cancelled is not a review decision', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000001', 'cancelled', 'No')$q$, '23514');
+  perform t.err('flow: unknown claim', $q$select public.admin_review_claim('e0000000-0000-0000-0000-0000000000ff', 'under_review')$q$, 'P0002');
+  perform t.works('flow: admin starts the review', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000001', 'under_review')$q$);
+  perform t.back();
+  perform t.ok('flow: starting a review marks the item under review', (select status = 'under_review' from public.reports where id = f1));
+
+  perform t.as_user(alice);
+  perform t.ok('flow: the claimant is told the review started', t.rows($q$select 1 from public.notifications where type = 'claim_under_review'$q$) = 1);
+  perform t.back();
+
+  perform t.as_user(adm);
+  perform t.works('flow: admin approves', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000001', 'approved', 'Bring your school ID to the guidance office.')$q$);
+  perform t.err('flow: a second claim cannot be approved for the same item', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000002', 'approved', 'Also fine')$q$, '23514');
+  perform t.works('flow: admin rejects the other claim', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000002', 'rejected', 'The sticker does not match.')$q$);
+  perform t.err('flow: a rejected claim cannot be approved again', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000002', 'approved', 'Changed my mind')$q$, '23514');
+  perform t.back();
+  perform t.ok('flow: approval marks the item as claimed, not returned', (select status = 'claimed' and resolved_at is null from public.reports where id = f1));
+  perform t.ok('flow: the claim records reviewer and approval time',
+    (select reviewer_id = adm and approved_at is not null and completed_at is null from public.claims where id = 'e0000000-0000-0000-0000-000000000001'));
+
+  perform t.as_user(dave);
+  perform t.err('flow: an item that is already claimed cannot get new claims',
+    $q$insert into public.claims (report_id, claimant_id, explanation) values ('d0000000-0000-0000-0000-000000000001', auth.uid(), 'Trying again after approval.')$q$, '23514');
+  perform t.back();
+
+  -- Handover
+  perform t.as_user(alice);
+  perform t.err('flow: the claimant cannot confirm her own handover', $q$select public.admin_complete_claim('e0000000-0000-0000-0000-000000000001')$q$, '42501');
+  perform t.ok('flow: the claimant sees the decision note and history',
+    (select decision_note from public.claims where id = 'e0000000-0000-0000-0000-000000000001') like 'Bring your school ID%'
+    and t.rows($q$select 1 from public.claim_events where claim_id = 'e0000000-0000-0000-0000-000000000001'$q$) = 3);
+  perform t.back();
+  perform t.as_user(adm);
+  perform t.works('flow: admin confirms the handover', $q$select public.admin_complete_claim('e0000000-0000-0000-0000-000000000001')$q$);
+  perform t.err('flow: handover cannot be confirmed twice', $q$select public.admin_complete_claim('e0000000-0000-0000-0000-000000000001')$q$, '23514');
+  perform t.back();
+  perform t.ok('flow: handover closes the report', (select status = 'completed' and resolved_at is not null from public.reports where id = f1));
+  perform t.ok('flow: handover records who confirmed it',
+    (select status = 'completed' and handover_confirmed_by = adm and completed_at is not null from public.claims where id = 'e0000000-0000-0000-0000-000000000001'));
+  perform t.ok('flow: other open claims on the item are closed automatically',
+    (select status = 'rejected' and decision_note like '%returned to its owner%' from public.claims where id = 'e0000000-0000-0000-0000-000000000005'));
+  perform t.as_user(dave);
+  perform t.ok('flow: the other claimant is told', t.rows($q$select 1 from public.notifications where type = 'claim_rejected'$q$) = 1);
+  perform t.back();
+  perform t.as_user(bob);
+  perform t.ok('flow: the finder is told the item was returned', t.rows($q$select 1 from public.notifications where type = 'item_returned'$q$) = 1);
+  perform t.back();
+  perform t.as_user(carol);
+  perform t.ok('flow: nobody else sees another person''s history', t.rows($q$select 1 from public.claim_events where claim_id = 'e0000000-0000-0000-0000-000000000001'$q$) = 0);
+  perform t.back();
+  perform t.as_user(adm);
+  perform t.ok('flow: the audit log records the review steps', t.rows($q$select 1 from public.activity_logs where action in ('claim_under_review', 'claim_approved', 'claim_completed', 'claim_rejected')$q$) >= 3);
+  perform t.back();
+
+  -- More information, resubmitting and withdrawing (item 2)
+  perform t.as_user(adm);
+  perform t.works('flow: admin asks for more information', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000003', 'more_info_required', 'Please send a photo of the receipt.')$q$);
+  perform t.back();
+  perform t.ok('flow: asking for information keeps the item under review', (select status = 'under_review' from public.reports where id = f2));
+
+  perform t.as_user(dave);
+  perform t.ok('flow: the claimant sees what is being asked', (select decision_note from public.claims where id = 'e0000000-0000-0000-0000-000000000003') like 'Please send%');
+  perform t.err('flow: evidence file path must be in the claimant''s own claim folder',
+    format($q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('e0000000-0000-0000-0000-000000000003', auth.uid(), %L, 'image/jpeg', 2000)$q$, alice::text || '/e0000000-0000-0000-0000-000000000001/1.jpg'), '23514');
+  v_ev := dave::text || '/e0000000-0000-0000-0000-000000000003/';
+  perform t.works('flow: evidence can be added when more information is requested',
+    format($q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) select 'e0000000-0000-0000-0000-000000000003', auth.uid(), %L || g || '.pdf', 'application/pdf', 5000 from generate_series(1, 5) g$q$, v_ev));
+  perform t.err('flow: a claim can have at most five files',
+    format($q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('e0000000-0000-0000-0000-000000000003', auth.uid(), %L, 'image/jpeg', 2000)$q$, v_ev || '6.jpg'), '23514');
+  perform t.err('flow: cannot resubmit someone else''s claim', $q$select public.resubmit_my_claim('e0000000-0000-0000-0000-000000000001')$q$, 'P0002');
+  perform t.err('flow: an explanation that is too short is refused', $q$select public.resubmit_my_claim('e0000000-0000-0000-0000-000000000003', 'short')$q$, '23514');
+  perform t.works('flow: claimant resubmits', $q$select public.resubmit_my_claim('e0000000-0000-0000-0000-000000000003', 'Receipt attached, the charger is a 65W model.')$q$);
+  perform t.err('flow: resubmitting twice is refused', $q$select public.resubmit_my_claim('e0000000-0000-0000-0000-000000000003')$q$, '23514');
+  perform t.ok('flow: resubmitting sends the claim back to pending', (select status = 'pending' and explanation like 'Receipt attached%' from public.claims where id = 'e0000000-0000-0000-0000-000000000003'));
+  perform t.back();
+  perform t.as_user(adm);
+  perform t.ok('flow: the reviewer is told about the answer', t.rows($q$select 1 from public.notifications where type = 'claim_resubmitted'$q$) = 1);
+  perform t.works('flow: admin approves item 2', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000003', 'approved', 'Collect at the guidance office.')$q$);
+  perform t.back();
+
+  delete from public.claim_evidence where storage_path = v_ev || '5.pdf';
+  perform t.as_user(dave);
+  perform t.err('evidence: cannot add evidence after approval',
+    format($q$insert into public.claim_evidence (claim_id, uploaded_by, storage_path, mime_type, size_bytes) values ('e0000000-0000-0000-0000-000000000003', auth.uid(), %L, 'image/jpeg', 2000)$q$, v_ev || 'late.jpg'), '42501');
+  perform t.works('flow: claimant withdraws an approved claim', $q$select public.cancel_my_claim('e0000000-0000-0000-0000-000000000003')$q$);
+  perform t.back();
+  perform t.ok('flow: withdrawing reopens the item', (select status = 'open' from public.reports where id = f2));
+
+  -- Evidence files
+  insert into storage.buckets (id, name, public) values ('claim-evidence', 'claim-evidence', false) on conflict do nothing;
+  perform t.as_user(dave);
+  perform t.works('files: claimant uploads evidence into their own folder',
+    format($q$insert into storage.objects (bucket_id, name) values ('claim-evidence', %L)$q$, v_ev || '1.pdf'));
+  perform t.works('files: and a leftover with no record',
+    format($q$insert into storage.objects (bucket_id, name) values ('claim-evidence', %L)$q$, v_ev || 'leftover.pdf'));
+  perform t.err('files: cannot upload into someone else''s evidence folder',
+    format($q$insert into storage.objects (bucket_id, name) values ('claim-evidence', %L)$q$, alice::text || '/x/1.pdf'), '42501');
+  perform t.ok('files: attached evidence cannot be deleted from the app',
+    t.affected(format($q$delete from storage.objects where name = %L$q$, v_ev || '1.pdf')) = 0);
+  perform t.ok('files: a failed upload leftover can be removed',
+    t.affected(format($q$delete from storage.objects where name = %L$q$, v_ev || 'leftover.pdf')) = 1);
+  perform t.back();
+  perform t.as_user(carol);
+  perform t.ok('files: other users cannot open evidence', t.rows(format($q$select 1 from storage.objects where name = %L$q$, v_ev || '1.pdf')) = 0);
+  perform t.back();
+  perform t.as_user(adm);
+  perform t.ok('files: administrators can open evidence', t.rows(format($q$select 1 from storage.objects where name = %L$q$, v_ev || '1.pdf')) = 1);
+  perform t.back();
+
+  -- A photo row cannot point at somebody else's file.
+  perform t.as_user(bob);
+  perform t.err('images: a photo row cannot point at another person''s file',
+    format($q$insert into public.item_images (report_id, uploaded_by, storage_path, mime_type, size_bytes) values (%L, auth.uid(), %L, 'image/jpeg', 1000)$q$, f2, alice::text || '/b0000000-0000-0000-0000-000000000004/id.jpg'), '23514');
+  perform t.back();
+
+  perform t.as_anon();
+  perform t.err('anon: cannot read claim history', 'select * from public.claim_events', '42501');
+  perform t.err('anon: cannot review claims', $q$select public.admin_review_claim('e0000000-0000-0000-0000-000000000001', 'approved', 'x')$q$, '42501');
+  perform t.back();
+
+  -- Leave the shared fixtures as they were for the sections that follow.
+  delete from public.reports where id in (f1, f2);
+  delete from storage.objects where bucket_id = 'claim-evidence';
+  delete from public.notifications;
 end $$;
 
 -- ===================================================================================
@@ -590,6 +765,7 @@ end $$;
 do $$
 declare alice uuid := t.u('2024001'); bob uuid := t.u('2024002'); adm uuid := t.u('2024005');
 begin
+  delete from public.notifications;
   insert into public.notifications (user_id, type, title) values (alice, 'claim', 'For alice'), (bob, 'claim', 'For bob');
   insert into public.error_logs (source, message) values ('test', 'Something broke');
 
@@ -634,9 +810,13 @@ end $$;
 -- 6b. Search and photo files (Phase 4)
 -- ===================================================================================
 do $$
-declare alice uuid := t.u('2024001'); bob uuid := t.u('2024002'); adm uuid := t.u('2024005');
+declare alice uuid := t.u('2024001'); bob uuid := t.u('2024002'); carol uuid := t.u('2024003'); adm uuid := t.u('2024005');
+        v_pub text; v_idp text; v_orph text;
         v_elec uuid := (select id from public.categories where slug = 'electronics');
 begin
+  v_pub := alice::text || '/b0000000-0000-0000-0000-000000000003/1.jpg';
+  v_idp := alice::text || '/b0000000-0000-0000-0000-000000000004/id.jpg';
+  v_orph := carol::text || '/orphan.jpg';
   perform t.as_user(bob);
   perform t.ok('search: no filters returns every visible report', t.rows('select 1 from public.search_reports(p_limit => 50)') = 5);
   perform t.ok('search: keyword matches the title', t.rows($q$select 1 from public.search_reports('clothing')$q$) = 1);
@@ -659,7 +839,7 @@ begin
   perform t.ok('search: second page works', t.rows($q$select 1 from public.search_reports(p_limit => 2, p_offset => 4)$q$) = 1);
   perform t.ok('search: page size is capped at 50', t.rows($q$select 1 from public.search_reports(p_limit => 100000)$q$) <= 50);
   perform t.ok('search: public photo path is returned',
-    (select image_path from public.search_reports(p_category_id => v_elec, p_type => 'found', p_limit => 50) where id = 'b0000000-0000-0000-0000-000000000003') = 'a/1.jpg');
+    (select image_path from public.search_reports(p_category_id => v_elec, p_type => 'found', p_limit => 50) where id = 'b0000000-0000-0000-0000-000000000003') = v_pub);
   perform t.ok('search: ID photo path is never returned',
     (select image_path from public.search_reports(p_limit => 50) where id = 'b0000000-0000-0000-0000-000000000004') is null);
   perform t.back();
@@ -690,13 +870,13 @@ begin
   -- Photo files
   insert into storage.buckets (id, name, public) values ('item-images', 'item-images', false) on conflict do nothing;
   insert into storage.objects (bucket_id, name) values
-    ('item-images', 'a/1.jpg'), ('item-images', 'a/id.jpg'), ('item-images', 'a/orphan.jpg');
+    ('item-images', v_pub), ('item-images', v_idp), ('item-images', v_orph);
   insert into storage.objects (bucket_id, name) values ('item-images', alice::text || '/mine.jpg');
 
   perform t.as_user(bob);
-  perform t.ok('files: others can open a public photo', t.rows($q$select 1 from storage.objects where name = 'a/1.jpg'$q$) = 1);
-  perform t.ok('files: others can NOT open an ID photo', t.rows($q$select 1 from storage.objects where name = 'a/id.jpg'$q$) = 0);
-  perform t.ok('files: a file with no database record is not readable by others', t.rows($q$select 1 from storage.objects where name = 'a/orphan.jpg'$q$) = 0);
+  perform t.ok('files: others can open a public photo', t.rows(format($q$select 1 from storage.objects where name = %L$q$, v_pub)) = 1);
+  perform t.ok('files: others can NOT open an ID photo', t.rows(format($q$select 1 from storage.objects where name = %L$q$, v_idp)) = 0);
+  perform t.ok('files: a file with no database record is not readable by others', t.rows(format($q$select 1 from storage.objects where name = %L$q$, v_orph)) = 0);
   perform t.works('files: upload into your own folder',
     format($q$insert into storage.objects (bucket_id, name) values ('item-images', %L)$q$, bob::text || '/r5/new.jpg'));
   perform t.err('files: cannot upload into someone else''s folder',
@@ -708,13 +888,13 @@ begin
   perform t.back();
 
   perform t.as_user(alice);
-  perform t.ok('files: the owner can open their ID photo', t.rows($q$select 1 from storage.objects where name = 'a/id.jpg'$q$) = 1);
+  perform t.ok('files: the owner can open their ID photo', t.rows(format($q$select 1 from storage.objects where name = %L$q$, v_idp)) = 1);
   perform t.ok('files: owner can delete their own file',
     t.affected(format($q$delete from storage.objects where name = %L$q$, alice::text || '/mine.jpg')) = 1);
   perform t.back();
 
   perform t.as_user(adm);
-  perform t.ok('files: admin can open an ID photo', t.rows($q$select 1 from storage.objects where name = 'a/id.jpg'$q$) = 1);
+  perform t.ok('files: admin can open an ID photo', t.rows(format($q$select 1 from storage.objects where name = %L$q$, v_idp)) = 1);
   perform t.back();
 
   perform t.as_anon();
@@ -749,7 +929,8 @@ begin
        'current_user_role', 'is_active_user', 'is_admin', 'is_super_admin',
        'set_user_role', 'set_account_status',
        'admin_set_report_status', 'admin_set_report_hidden',
-       'cancel_my_claim', 'is_conversation_member', 'respond_to_message_request',
+       'cancel_my_claim', 'resubmit_my_claim', 'admin_review_claim', 'admin_complete_claim',
+       'report_has_live_claims', 'is_conversation_member', 'respond_to_message_request',
        'admin_remove_community_message', 'search_reports');
   perform t.ok('structure: signed-in users can run only the approved functions (extra: ' || coalesce(v_missing, 'none') || ')', v_missing is null);
 

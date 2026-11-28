@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import {
   ArrowLeft,
   CalendarDays,
+  ClipboardList,
   Clock,
   HandHelping,
   MapPin,
@@ -22,10 +23,11 @@ import { ReportTypeBadge } from '../../components/common/ReportTypeBadge';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { useAuth } from '../../hooks/useAuth';
 import { useResource } from '../../hooks/useResource';
+import { getMyLiveClaimId } from '../../services/claimService';
 import { deleteReport, getReport } from '../../services/reportService';
 import { ITEM_CATEGORIES } from '../../utils/categories';
 import { formatReportDate } from '../../utils/formatDate';
-import { reportRoutes, ROUTES } from '../../utils/routes';
+import { claimRoutes, reportRoutes, ROUTES } from '../../utils/routes';
 import styles from './ReportDetail.module.css';
 
 export function ReportDetailPage() {
@@ -36,6 +38,11 @@ export function ReportDetailPage() {
 
   const load = useCallback(() => getReport(id), [id]);
   const { result, reload } = useResource(load);
+
+  const userId = user?.id ?? '';
+  const loadClaim = useCallback(() => getMyLiveClaimId(userId, id), [userId, id]);
+  const { result: claimResult } = useResource(loadClaim);
+  const myClaim = claimResult && claimResult.ok ? claimResult.data : null;
 
   const [selectedPhoto, setSelectedPhoto] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -245,11 +252,26 @@ export function ReportDetailPage() {
 
           {canBeClaimed ? (
             <div className={styles.claim}>
-              <h2 className={styles.blockTitle}>Is this yours?</h2>
-              <p className={styles.text}>
-                Ownership claims open in the next update. Until then, note the details above and check back soon.
-              </p>
-              <Button disabled>Claim this item</Button>
+              {myClaim ? (
+                <>
+                  <h2 className={styles.blockTitle}>You have claimed this item</h2>
+                  <p className={styles.text}>Open your claim to follow its progress or answer questions.</p>
+                  <ButtonLink to={claimRoutes.detail(myClaim.id)} leadingIcon={ClipboardList}>
+                    View your claim
+                  </ButtonLink>
+                </>
+              ) : (
+                <>
+                  <h2 className={styles.blockTitle}>Is this yours?</h2>
+                  <p className={styles.text}>
+                    Send a claim and explain how you know it is yours. An administrator checks every claim before the
+                    item is handed over.
+                  </p>
+                  <ButtonLink to={reportRoutes.claim(report.id)} leadingIcon={HandHelping}>
+                    Claim this item
+                  </ButtonLink>
+                </>
+              )}
             </div>
           ) : null}
         </section>

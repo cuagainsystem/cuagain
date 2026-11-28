@@ -10,12 +10,12 @@ import { ReportGrid, ReportGridSkeleton } from '../../components/reports/ReportG
 import { useAuth } from '../../hooks/useAuth';
 import { useResource } from '../../hooks/useResource';
 import { signOutUser } from '../../services/authService';
-import { loadDashboard, type DashboardData } from '../../services/dashboardService';
+import { loadDashboard, markNotificationRead, type DashboardData } from '../../services/dashboardService';
 import { success, type Result } from '../../services/result';
-import type { AppRole } from '../../types/database';
+import { isAdminRole, type AppRole } from '../../types/database';
 import { CLAIM_STATUS_LABELS, CLAIM_STATUS_TONES } from '../../utils/claimLabels';
 import { formatTimestamp } from '../../utils/formatDate';
-import { reportRoutes, ROUTES } from '../../utils/routes';
+import { claimRoutes, reportRoutes, ROUTES } from '../../utils/routes';
 import styles from './PortalPage.module.css';
 
 const ROLE_LABELS: Record<AppRole, string> = {
@@ -85,6 +85,11 @@ export function PortalPage() {
           <ButtonLink to={ROUTES.reports} variant="secondary" leadingIcon={Search}>
             Browse items
           </ButtonLink>
+          {isAdminRole(profile?.role) ? (
+            <ButtonLink to={ROUTES.adminClaims} variant="secondary" leadingIcon={ClipboardCheck}>
+              Review claims
+            </ButtonLink>
+          ) : null}
         </div>
       </header>
 
@@ -116,12 +121,12 @@ export function PortalPage() {
           <span className={styles.statLabel}>Your reports</span>
           <span className={styles.statNote}>{data?.summary.ok ? `${data.summary.data.open} still open` : 'Loading'}</span>
         </Link>
-        <div className={styles.stat}>
+        <Link to={ROUTES.myClaims} className={styles.stat}>
           <ClipboardCheck aria-hidden="true" />
           <span className={styles.statValue}>{data?.claims.ok ? activeClaims : '-'}</span>
           <span className={styles.statLabel}>Active claims</span>
-          <span className={styles.statNote}>Claims open in the next update</span>
-        </div>
+          <span className={styles.statNote}>See all your claims</span>
+        </Link>
         <div className={styles.stat}>
           <Bell aria-hidden="true" />
           <span className={styles.statValue}>{data?.notifications.ok ? unread : '-'}</span>
@@ -184,16 +189,18 @@ export function PortalPage() {
           ) : !data.claims.ok ? (
             <SectionError message={data.claims.message} />
           ) : data.claims.data.length === 0 ? (
-            <p className={styles.muted}>You have not claimed anything. When you find your item in the found list, you will be able to claim it here.</p>
+            <p className={styles.muted}>You have not claimed anything. If you see your item in the found list, open it and send a claim.</p>
           ) : (
             <ul className={styles.list}>
               {data.claims.data.map((claim) => (
-                <li key={claim.id} className={styles.listItem}>
-                  <div>
-                    <p className={styles.itemTitle}>{claim.reportTitle}</p>
-                    <p className={styles.itemMeta}>{formatTimestamp(claim.createdAt)}</p>
-                  </div>
-                  <Badge tone={CLAIM_STATUS_TONES[claim.status]}>{CLAIM_STATUS_LABELS[claim.status]}</Badge>
+                <li key={claim.id}>
+                  <Link to={claimRoutes.detail(claim.id)} className={styles.listItem}>
+                    <div>
+                      <p className={styles.itemTitle}>{claim.reportTitle}</p>
+                      <p className={styles.itemMeta}>{formatTimestamp(claim.createdAt)}</p>
+                    </div>
+                    <Badge tone={CLAIM_STATUS_TONES[claim.status]}>{CLAIM_STATUS_LABELS[claim.status]}</Badge>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -213,12 +220,29 @@ export function PortalPage() {
           ) : (
             <ul className={styles.list}>
               {data.notifications.data.map((item) => (
-                <li key={item.id} className={styles.listItem} data-unread={!item.isRead}>
-                  <div>
-                    <p className={styles.itemTitle}>{item.title}</p>
-                    {item.body ? <p className={styles.itemMeta}>{item.body}</p> : null}
-                    <p className={styles.itemMeta}>{formatTimestamp(item.createdAt)}</p>
-                  </div>
+                <li key={item.id}>
+                  {item.link && item.link.startsWith('/') ? (
+                    <Link
+                      to={item.link}
+                      className={styles.listItem}
+                      data-unread={!item.isRead}
+                      onClick={() => void markNotificationRead(item.id)}
+                    >
+                      <div>
+                        <p className={styles.itemTitle}>{item.title}</p>
+                        {item.body ? <p className={styles.itemMeta}>{item.body}</p> : null}
+                        <p className={styles.itemMeta}>{formatTimestamp(item.createdAt)}</p>
+                      </div>
+                    </Link>
+                  ) : (
+                    <div className={styles.listItem} data-unread={!item.isRead}>
+                      <div>
+                        <p className={styles.itemTitle}>{item.title}</p>
+                        {item.body ? <p className={styles.itemMeta}>{item.body}</p> : null}
+                        <p className={styles.itemMeta}>{formatTimestamp(item.createdAt)}</p>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

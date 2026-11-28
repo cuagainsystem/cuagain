@@ -1,4 +1,4 @@
-import type { ClaimStatus } from '../services/dashboardService';
+import type { ClaimStatus } from '../types/claim';
 import type { BadgeTone } from '../types/ui';
 
 export const CLAIM_STATUS_LABELS: Record<ClaimStatus, string> = {
