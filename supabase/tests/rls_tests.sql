@@ -760,6 +760,215 @@ begin
 end $$;
 
 -- ===================================================================================
+-- 5b. Communication safety, notifications and the email queue (Phase 6)
+-- ===================================================================================
+do $$
+declare alice uuid := t.u('2024001'); bob uuid := t.u('2024002'); carol uuid := t.u('2024003');
+        dave uuid := t.u('2024004'); adm uuid := t.u('2024005');
+        v_req uuid; v_conv uuid; v_cm uuid; v_pm uuid; v_report uuid; v_dave_name text;
+        f1 uuid := 'f0000000-0000-0000-0000-000000000001';
+        f2 uuid := 'f0000000-0000-0000-0000-000000000002';
+begin
+  delete from public.notifications;
+  select username into v_dave_name from public.profiles where id = dave;
+
+  -- Blocking
+  perform t.as_user(carol);
+  perform t.works('block: carol blocks dave', format($q$insert into public.user_blocks (blocker_id, blocked_id) values (auth.uid(), %L)$q$, dave));
+  perform t.err('block: cannot block as someone else', format($q$insert into public.user_blocks (blocker_id, blocked_id) values (%L, %L)$q$, bob, alice), '42501');
+  perform t.err('block: cannot block yourself', $q$insert into public.user_blocks (blocker_id, blocked_id) values (auth.uid(), auth.uid())$q$, '23514');
+  perform t.err('block: the blocker cannot send a request either', format($q$insert into public.message_requests (requester_id, recipient_id, intro_message) values (auth.uid(), %L, 'Hello')$q$, dave), '23514');
+  perform t.back();
+  perform t.as_user(dave);
+  perform t.ok('block: the blocked person cannot see the block', t.rows('select 1 from public.user_blocks') = 0);
+  perform t.err('block: a blocked person cannot send a request', format($q$insert into public.message_requests (requester_id, recipient_id, intro_message) values (auth.uid(), %L, 'Please talk to me')$q$, carol), '23514');
+  perform t.back();
+  perform t.as_user(carol);
+  perform t.works('block: unblock', format($q$delete from public.user_blocks where blocked_id = %L$q$, dave));
+  perform t.back();
+
+  -- Request, notification, accept
+  perform t.as_user(dave);
+  perform t.works('request: dave asks carol', format($q$insert into public.message_requests (requester_id, recipient_id, intro_message) values (auth.uid(), %L, 'Hi, is the blue bottle yours?')$q$, carol));
+  perform t.back();
+  perform t.as_user(carol);
+  perform t.ok('notify: the recipient is told about the request', t.rows($q$select 1 from public.notifications where type = 'message_request' and link = '/messages?tab=requests'$q$) = 1);
+  select id into v_req from public.message_requests where requester_id = dave and recipient_id = carol;
+  v_conv := public.respond_to_message_request(v_req, true);
+  perform t.back();
+  perform t.as_user(dave);
+  perform t.ok('notify: the requester is told it was accepted', t.rows($q$select 1 from public.notifications where type = 'message_request_accepted'$q$) = 1);
+  perform t.ok('notify: the opening message creates no message alert', t.rows($q$select 1 from public.notifications where type = 'new_message'$q$) = 0);
+  perform t.err('request: no second request when a conversation already exists', format($q$insert into public.message_requests (requester_id, recipient_id, intro_message) values (auth.uid(), %L, 'Again?')$q$, carol), '23514');
+  perform t.works('messages: dave writes', format($q$insert into public.messages (conversation_id, sender_id, body) values (%L, auth.uid(), 'Are you there?')$q$, v_conv));
+  perform t.works('messages: dave writes again', format($q$insert into public.messages (conversation_id, sender_id, body) values (%L, auth.uid(), 'It is blue with a dent.')$q$, v_conv));
+  perform t.back();
+  -- A test runs in one transaction, so every timestamp would be identical. Spread them out.
+  update public.conversation_members set last_read_at = now() - interval '1 hour' where conversation_id = v_conv;
+  update public.messages set created_at = now() - interval '30 minutes' where conversation_id = v_conv and body = 'Hi, is the blue bottle yours?';
+  update public.messages set created_at = now() - interval '20 minutes' where conversation_id = v_conv and body = 'Are you there?';
+  update public.messages set created_at = now() - interval '10 minutes' where conversation_id = v_conv and body = 'It is blue with a dent.';
+  update public.conversations set last_message_at = now() - interval '10 minutes' where id = v_conv;
+
+  perform t.as_user(carol);
+  perform t.ok('notify: one alert per conversation until read', t.rows($q$select 1 from public.notifications where type = 'new_message'$q$) = 1);
+  perform t.ok('notify: the alert does not reveal the message', (select body from public.notifications where type = 'new_message') = 'Open the conversation to read it.');
+  perform t.ok('conversations: list shows who, last message and unread count',
+    (select other_username = v_dave_name and unread_count = 3 and last_message = 'It is blue with a dent.' and not i_blocked
+       from public.list_my_conversations() where conversation_id = v_conv));
+  perform t.works('conversations: marking read', format($q$update public.conversation_members set last_read_at = now() where conversation_id = %L and user_id = auth.uid()$q$, v_conv));
+  perform t.ok('conversations: unread count drops to zero', (select unread_count from public.list_my_conversations() where conversation_id = v_conv) = 0);
+  perform t.works('notify: read the alert', $q$update public.notifications set is_read = true where type = 'new_message'$q$);
+  perform t.back();
+  perform t.as_user(dave);
+  perform t.works('messages: dave writes after it was read', format($q$insert into public.messages (conversation_id, sender_id, body) values (%L, auth.uid(), 'Hello?')$q$, v_conv));
+  perform t.back();
+  perform t.as_user(carol);
+  perform t.ok('notify: a new alert once the old one was read', t.rows($q$select 1 from public.notifications where type = 'new_message'$q$) = 2);
+  perform t.back();
+  perform t.as_user(bob);
+  perform t.ok('conversations: others do not see this conversation', t.rows(format($q$select 1 from public.list_my_conversations() where other_username = %L$q$, v_dave_name)) = 0);
+  perform t.back();
+
+  -- Blocking inside a conversation
+  perform t.as_user(carol);
+  perform t.works('block: carol blocks dave mid-conversation', format($q$insert into public.user_blocks (blocker_id, blocked_id) values (auth.uid(), %L)$q$, dave));
+  perform t.ok('block: the list shows the block', (select i_blocked from public.list_my_conversations() where conversation_id = v_conv));
+  perform t.err('block: the blocker cannot send either', format($q$insert into public.messages (conversation_id, sender_id, body) values (%L, auth.uid(), 'Wait')$q$, v_conv), '23514');
+  perform t.back();
+  perform t.as_user(dave);
+  perform t.err('block: the blocked person cannot send', format($q$insert into public.messages (conversation_id, sender_id, body) values (%L, auth.uid(), 'Please')$q$, v_conv), '23514');
+  perform t.back();
+  perform t.as_user(carol);
+  perform t.works('block: unblock again', format($q$delete from public.user_blocks where blocked_id = %L$q$, dave));
+  perform t.back();
+
+  -- Suspended people cannot receive requests
+  update public.profile_private set status = 'suspended' where id = bob;
+  perform t.as_user(dave);
+  perform t.err('request: a suspended person cannot be asked', format($q$insert into public.message_requests (requester_id, recipient_id, intro_message) values (auth.uid(), %L, 'Hello')$q$, bob), '23514');
+  perform t.back();
+  update public.profile_private set status = 'active' where id = bob;
+
+  -- Speed limits
+  perform t.as_user(dave);
+  perform t.works('limit: bursts of private messages are fine up to the limit', format($q$insert into public.messages (conversation_id, sender_id, body) select %L, auth.uid(), 'msg ' || g from generate_series(1, 29) g$q$, v_conv));
+  perform t.err('limit: the next one is refused', format($q$insert into public.messages (conversation_id, sender_id, body) values (%L, auth.uid(), 'too many')$q$, v_conv), '23514');
+  perform t.works('limit: eight community posts are fine', $q$insert into public.community_messages (author_id, body) select auth.uid(), 'post ' || g from generate_series(1, 8) g$q$);
+  perform t.err('limit: the ninth community post is refused', $q$insert into public.community_messages (author_id, body) values (auth.uid(), 'spam')$q$, '23514');
+  perform t.back();
+
+  -- Abuse reports
+  select id into v_cm from public.community_messages where author_id = dave order by created_at limit 1;
+  select id into v_pm from public.messages where conversation_id = v_conv and sender_id = dave order by created_at limit 1;
+
+  perform t.as_user(alice);
+  perform t.works('abuse: report a community message', format($q$select public.report_abuse('community_message', %L, 'spam', 'Posting repeatedly')$q$, v_cm));
+  perform t.err('abuse: the same report twice is refused', format($q$select public.report_abuse('community_message', %L, 'spam')$q$, v_cm), '23514');
+  perform t.err('abuse: a message that does not exist', $q$select public.report_abuse('community_message', gen_random_uuid(), 'spam')$q$, 'P0002');
+  perform t.err('abuse: a private message from a chat you are not in', format($q$select public.report_abuse('private_message', %L, 'harassment')$q$, v_pm), 'P0002');
+  perform t.err('abuse: unknown kind', format($q$select public.report_abuse('everything', %L, 'spam')$q$, v_cm), '23514');
+  perform t.err('abuse: unknown reason', format($q$select public.report_abuse('user', %L, 'because')$q$, dave), '23514');
+  perform t.err('abuse: you cannot report yourself', format($q$select public.report_abuse('user', %L, 'spam')$q$, alice), '23514');
+  perform t.works('abuse: report a person', format($q$select public.report_abuse('user', %L, 'scam')$q$, dave));
+  perform t.err('abuse: no direct inserts', format($q$insert into public.abuse_reports (reporter_id, kind, target_id, target_user_id, reason) values (auth.uid(), 'user', %L, %L, 'spam')$q$, dave, dave), '42501');
+  perform t.ok('abuse: reporter sees their own reports', t.rows('select 1 from public.abuse_reports') = 2);
+  perform t.back();
+  perform t.as_user(carol);
+  perform t.works('abuse: report a private message you received', format($q$select public.report_abuse('private_message', %L, 'harassment', 'Keeps messaging me')$q$, v_pm));
+  perform t.back();
+  perform t.as_user(dave);
+  perform t.ok('abuse: the reported person cannot see reports', t.rows('select 1 from public.abuse_reports') = 0);
+  perform t.back();
+  perform t.as_user(bob);
+  perform t.ok('abuse: other users cannot see reports', t.rows('select 1 from public.abuse_reports') = 0);
+  perform t.err('abuse: other users cannot resolve reports', $q$select public.admin_resolve_abuse_report(gen_random_uuid(), 'dismissed')$q$, '42501');
+  perform t.back();
+  perform t.as_user(adm);
+  perform t.ok('abuse: administrators see all reports', t.rows('select 1 from public.abuse_reports') = 3);
+  perform t.ok('abuse: the reported private message is kept as a snapshot', (select snapshot from public.abuse_reports where kind = 'private_message') = 'Hi, is the blue bottle yours?');
+  perform t.ok('abuse: administrators still cannot read private chats', t.rows('select 1 from public.messages') = 0);
+  perform t.ok('abuse: administrators are notified', t.rows($q$select 1 from public.notifications where type = 'abuse_report' and link = '/admin/abuse'$q$) = 3);
+  select id into v_report from public.abuse_reports where kind = 'user';
+  perform t.err('abuse: invalid outcome', format($q$select public.admin_resolve_abuse_report(%L, 'deleted')$q$, v_report), '23514');
+  perform t.works('abuse: admin dismisses a report', format($q$select public.admin_resolve_abuse_report(%L, 'dismissed', 'No evidence')$q$, v_report));
+  perform t.err('abuse: a handled report cannot be handled again', format($q$select public.admin_resolve_abuse_report(%L, 'actioned')$q$, v_report), 'P0002');
+  perform t.ok('abuse: outcome and handler are recorded', (select status = 'dismissed' and handled_by = adm and handled_note = 'No evidence' and handled_at is not null from public.abuse_reports where id = v_report));
+  perform t.back();
+  perform t.as_anon();
+  perform t.err('anon: cannot report abuse', format($q$select public.report_abuse('user', %L, 'spam')$q$, dave), '42501');
+  perform t.err('anon: cannot read blocks', 'select * from public.user_blocks', '42501');
+  perform t.back();
+
+  -- Email preferences and queue
+  delete from public.email_outbox;
+  perform t.as_user(dave);
+  perform t.works('prefs: dave saves preferences', $q$insert into public.notification_preferences (user_id, email_updates, email_messages) values (auth.uid(), false, true)$q$);
+  perform t.err('prefs: cannot save for someone else', format($q$insert into public.notification_preferences (user_id) values (%L)$q$, alice), '42501');
+  perform t.back();
+  perform t.as_user(alice);
+  perform t.ok('prefs: others cannot read them', t.rows('select 1 from public.notification_preferences') = 0);
+  perform t.ok('queue: normal users cannot read the email queue', t.rows('select 1 from public.email_outbox') = 0);
+  perform t.back();
+
+  perform t.mkreport(f1, alice, 'found', 'electronics');
+  perform t.mkreport(f2, dave, 'found', 'electronics');
+  perform t.ok('queue: a submitted report queues an email by default', (select count(*) from public.email_outbox where user_id = alice and template = 'report_submitted') = 1);
+  perform t.ok('queue: but not when the person turned updates off', (select count(*) from public.email_outbox where user_id = dave and template = 'report_submitted') = 0);
+
+  perform t.as_user(bob);
+  perform t.works('claim: bob claims the item alice found', format($q$insert into public.claims (report_id, claimant_id, explanation) values (%L, auth.uid(), 'It is mine, it has my wallpaper.')$q$, f1));
+  perform t.back();
+  perform t.ok('notify: the finder is told about the claim', (select count(*) from public.notifications where user_id = alice and type = 'claim_received' and link = '/reports/' || f1) = 1);
+  perform t.ok('queue: the finder is emailed about the claim', (select count(*) from public.email_outbox where user_id = alice and template = 'claim_received') = 1);
+  perform t.ok('queue: carol did not opt in, so her message alerts send no email',
+    (select count(*) from public.email_outbox where user_id = carol) = 0);
+
+  perform t.as_user(dave);
+  perform t.works('conversations: dave marks read', format($q$update public.conversation_members set last_read_at = now() where conversation_id = %L and user_id = auth.uid()$q$, v_conv));
+  perform t.works('notify: dave reads his alerts', $q$update public.notifications set is_read = true where type in ('new_message', 'message_request_accepted')$q$);
+  perform t.back();
+  perform t.as_user(carol);
+  perform t.works('limit: carol replies', format($q$insert into public.messages (conversation_id, sender_id, body) values (%L, auth.uid(), 'Yes it is mine.')$q$, v_conv));
+  perform t.back();
+  perform t.ok('queue: dave opted in, so a reply queues a message email', (select count(*) from public.email_outbox where user_id = dave and template = 'new_message') = 1);
+  perform t.ok('queue: the in-app alert exists whatever happens to the email', (select count(*) from public.notifications where user_id = dave and type = 'new_message' and not is_read) = 1);
+  perform t.as_user(adm);
+  perform t.ok('queue: administrators can monitor the email queue', t.rows('select 1 from public.email_outbox') >= 3);
+  perform t.back();
+  perform t.as_user(alice);
+  perform t.err('queue: normal users cannot change the queue', $q$update public.email_outbox set status = 'sent'$q$, '42501');
+  perform t.back();
+
+  -- The email worker's door: service role only, small batches, attempts are counted.
+  perform t.as_user(alice);
+  perform t.err('worker: normal users cannot claim emails', 'select * from public.claim_pending_emails(5)', '42501');
+  perform t.back();
+  perform t.as_anon();
+  perform t.err('worker: anon cannot claim emails', 'select * from public.claim_pending_emails(5)', '42501');
+  perform t.back();
+  set local role service_role;
+  perform t.ok('worker: claims pending emails with address and text', (select count(*) from public.claim_pending_emails(50) c where c.to_email like '%@%' and c.title <> '') >= 3);
+  perform t.ok('worker: a claimed email has its attempt counted', (select min(attempts) from public.email_outbox where status = 'pending') = 1);
+  reset role;
+  update public.email_outbox set attempts = 5;
+  set local role service_role;
+  perform t.ok('worker: gives up after five attempts', (select count(*) from public.claim_pending_emails(50)) = 0);
+  reset role;
+
+  -- Leave the shared fixtures as they were for the sections that follow.
+  delete from public.reports where id in (f1, f2);
+  delete from public.conversations where id = v_conv;
+  delete from public.message_requests where requester_id = dave or recipient_id = dave;
+  delete from public.user_blocks;
+  delete from public.abuse_reports;
+  delete from public.community_messages where author_id in (dave, carol);
+  delete from public.notification_preferences;
+  delete from public.email_outbox;
+  delete from public.notifications;
+end $$;
+
+-- ===================================================================================
 -- 6. Notifications, logs, watchlist
 -- ===================================================================================
 do $$
@@ -930,7 +1139,8 @@ begin
        'set_user_role', 'set_account_status',
        'admin_set_report_status', 'admin_set_report_hidden',
        'cancel_my_claim', 'resubmit_my_claim', 'admin_review_claim', 'admin_complete_claim',
-       'report_has_live_claims', 'is_conversation_member', 'respond_to_message_request',
+       'report_has_live_claims', 'list_my_conversations', 'report_abuse', 'admin_resolve_abuse_report',
+       'is_conversation_member', 'respond_to_message_request',
        'admin_remove_community_message', 'search_reports');
   perform t.ok('structure: signed-in users can run only the approved functions (extra: ' || coalesce(v_missing, 'none') || ')', v_missing is null);
 

@@ -12,6 +12,10 @@ export const ROUTES = {
   myReports: '/my-reports',
   myClaims: '/claims',
   adminClaims: '/admin/claims',
+  adminAbuse: '/admin/abuse',
+  notifications: '/notifications',
+  messages: '/messages',
+  community: '/community',
 } as const;
 
 /** Routes that need an id or a type are built with these helpers. */
@@ -35,3 +39,8 @@ export const HOME_SECTIONS = {
   claiming: '/#claiming',
   faqs: '/#faqs',
 } as const;
+
+export const messageRoutes = {
+  thread: (id: string) => `/messages/${id}`,
+  requests: '/messages?tab=requests',
+};

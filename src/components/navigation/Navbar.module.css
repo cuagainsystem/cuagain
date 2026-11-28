@@ -65,7 +65,23 @@
   height: 20px;
 }
 
-@media (max-width: 720px) {
+.bell {
+  width: 18px;
+  height: 18px;
+}
+
+.bellLabel {
+  display: none;
+}
+
+.newDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+@media (max-width: 1060px) {
   .menuButton {
     display: grid;
   }
@@ -102,6 +118,10 @@
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-md);
     font-size: var(--text-base);
+  }
+
+  .bellLabel {
+    display: inline;
   }
 
   .portalItem {

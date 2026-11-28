@@ -33,6 +33,11 @@ const EditReportPage = lazy(() => import('./pages/reports/ReportFormPage').then(
 const ReportDetailPage = lazy(() =>
   import('./pages/reports/ReportDetailPage').then((m) => ({ default: m.ReportDetailPage })),
 );
+const NotificationsPage = lazy(() => import('./pages/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
+const MessagesPage = lazy(() => import('./pages/messages/MessagesPage').then((m) => ({ default: m.MessagesPage })));
+const ConversationPage = lazy(() => import('./pages/messages/ConversationPage').then((m) => ({ default: m.ConversationPage })));
+const CommunityPage = lazy(() => import('./pages/chat/CommunityPage').then((m) => ({ default: m.CommunityPage })));
+const AdminAbusePage = lazy(() => import('./pages/admin/AdminAbusePage').then((m) => ({ default: m.AdminAbusePage })));
 const DesignSystemPage = lazy(() =>
   import('./pages/design-system/DesignSystemPage').then((m) => ({ default: m.DesignSystemPage })),
 );
@@ -63,9 +68,14 @@ export default function App() {
           <Route path="/reports/:id" element={<ReportDetailPage />} />
           <Route path={ROUTES.myClaims} element={<MyClaimsPage />} />
           <Route path="/claims/:id" element={<ClaimDetailPage />} />
+          <Route path={ROUTES.notifications} element={<NotificationsPage />} />
+          <Route path={ROUTES.messages} element={<MessagesPage />} />
+          <Route path="/messages/:conversationId" element={<ConversationPage />} />
+          <Route path={ROUTES.community} element={<CommunityPage />} />
           <Route element={<AdminRoute />}>
             <Route path={ROUTES.adminClaims} element={<AdminClaimsPage />} />
             <Route path="/admin/claims/:id" element={<AdminClaimDetailPage />} />
+            <Route path={ROUTES.adminAbuse} element={<AdminAbusePage />} />
           </Route>
         </Route>
 

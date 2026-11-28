@@ -313,8 +313,66 @@ Try on your real project (you need two accounts, one made administrator):
 
 Left for later: feedback after a completed claim (the table exists), email notifications (Phase 6 with Brevo), the full administrator dashboard (Phase 7), search by photo (Phase 8), and cleanup of orphaned files.
 
-## Before Phase 6
+## Phase 6: communication and notifications
 
-- Run the checklist above on your real project.
-- Create a Brevo account and sender address for email notifications.
+Routes (all need sign-in):
+
+| Route | Who | What it is |
+| --- | --- | --- |
+| `/notifications` | Everyone | Alerts inbox: open, mark read, mark all read, delete, plus email settings |
+| `/messages` | Everyone | Conversations and message requests (`?tab=requests`) |
+| `/messages/:id` | The two people in it | Private chat with block and report |
+| `/community` | Everyone | Shared chat; report a message; administrators can remove one |
+| `/admin/abuse` | Administrators | Reported messages and people, with a saved copy of the reported text |
+
+The navigation shows a bell with the number of unread alerts, a badge on Messages, and a dot on Community when someone else posted since you last looked.
+
+How private messaging works: on an item page, "Message <name>" sends a short request. Nothing reaches the other person's conversations until they accept. Either person can block the other from the chat page; blocking stops messages and new requests in both directions, and blocked people's messages are hidden in the community chat for you.
+
+Rules enforced by the database (migrations 10 and 11), not only the screens:
+
+- Only the two people in a conversation can read it. Administrators cannot.
+- No message or request is allowed between blocked people, to inactive accounts, or when a conversation already exists. At most 10 requests can be waiting at once.
+- Speed limits: 30 private messages and 8 community messages per minute per person.
+- A report keeps a copy of the message as it was when reported, so editing or deleting it later does not erase the evidence. One report per person per target. Administrators are notified.
+- Removing a community message is administrator-only and recorded in the activity log.
+
+Notifications and email:
+
+1. Every alert is saved in the app first. Whatever happens to email, the alert is there.
+2. If the person's settings allow, an email is queued in `email_outbox`. Report and claim updates are on by default; message emails are off by default.
+3. The Edge Function `process-email-outbox` sends queued emails through Brevo (key kept as a server secret) and records success or the error. It retries up to 5 times. Emails never contain private message text.
+4. The function can only reach the queue through one narrow database function; it cannot read profiles or notifications directly.
+
+Setup steps for Brevo, the function, the webhook, retries and registration emails are in `docs/PHASE6_EMAIL_SETUP.md`.
+
+Migrations 10 (`communication`) and 11 (`email_worker`) are applied to your Supabase project. `npm run test:db` now runs 396 checks. Template tests: `node --experimental-strip-types supabase/functions/process-email-outbox/template.test.ts`.
+
+### Phase 6 completion check
+
+| Item | Status |
+| --- | --- |
+| Community chat with names, times, report, admin removal | Done |
+| Private message requests: send, accept, decline, unread counts | Done |
+| Block, unblock, report a message or a person | Done |
+| Notifications inbox, bell with count, email preferences | Done |
+| Email through Brevo with in-app record and retry | Code written; **not deployed or tested with real email** |
+| Realtime updates | Built with a 6 to 30 second polling fallback; **not tested against the real project** |
+| Automated checks | 64 browser checks (Phase 6), 90, 130, 76 (earlier phases), 396 database checks, all passing against a simulated Supabase |
+| Works end to end on your real project | **Not yet verified.** See the checklist below |
+
+Try on your real project (two accounts):
+
+1. Account A opens a found item posted by B and sends a message request. B sees it in Messages, Requests, and accepts.
+2. Chat both ways. Check the badge and bell update, and the unread count clears when the chat is opened.
+3. Block, then confirm sending is refused. Unblock. Report a message and, as administrator, open Abuse reports.
+4. Post in Community from both accounts; as administrator remove a message.
+5. After the Brevo steps: submit a report and check the email arrives.
+
+Left for later: the full administrator dashboard (Phase 7), search by photo (Phase 8), typing indicators and read receipts.
+
+## Before Phase 7
+
+- Run the Phase 5 and Phase 6 checklists on your real project.
+- Follow `docs/PHASE6_EMAIL_SETUP.md` (Brevo account, function, secrets, webhook).
 - Confirm the approved school email domain with the university and set it.

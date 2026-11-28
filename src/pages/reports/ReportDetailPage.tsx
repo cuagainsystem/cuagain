@@ -6,6 +6,7 @@ import {
   Clock,
   HandHelping,
   MapPin,
+  MessageCircle,
   PackageSearch,
   Pencil,
   ShieldCheck,
@@ -21,6 +22,7 @@ import { FormNotice } from '../../components/common/FormNotice';
 import { PageLoader } from '../../components/common/PageLoader';
 import { ReportTypeBadge } from '../../components/common/ReportTypeBadge';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { RequestMessageDialog } from '../../components/communication/RequestMessageDialog';
 import { useAuth } from '../../hooks/useAuth';
 import { useResource } from '../../hooks/useResource';
 import { getMyLiveClaimId } from '../../services/claimService';
@@ -40,6 +42,9 @@ export function ReportDetailPage() {
   const { result, reload } = useResource(load);
 
   const userId = user?.id ?? '';
+  const [messageOpen, setMessageOpen] = useState(false);
+  // A new key each time the dialog opens, so it always starts as an empty form.
+  const [messageKey, setMessageKey] = useState(0);
   const loadClaim = useCallback(() => getMyLiveClaimId(userId, id), [userId, id]);
   const { result: claimResult } = useResource(loadClaim);
   const myClaim = claimResult && claimResult.ok ? claimResult.data : null;
@@ -274,8 +279,35 @@ export function ReportDetailPage() {
               )}
             </div>
           ) : null}
+
+          {!isOwner ? (
+            <div className={styles.claim}>
+              <h2 className={styles.blockTitle}>Have a question?</h2>
+              <p className={styles.text}>
+                Ask {report.reporterName} privately. They will see a short request first and can accept or decline.
+              </p>
+              <Button variant="secondary" leadingIcon={MessageCircle} onClick={() => {
+                  setMessageKey((key) => key + 1);
+                  setMessageOpen(true);
+                }}>
+                Message {report.reporterName}
+              </Button>
+            </div>
+          ) : null}
         </section>
       </div>
+
+      {!isOwner && user ? (
+        <RequestMessageDialog
+          key={messageKey}
+          open={messageOpen}
+          onClose={() => setMessageOpen(false)}
+          userId={user.id}
+          recipientId={report.reporterId}
+          recipientName={report.reporterName}
+          reportId={report.id}
+        />
+      ) : null}
 
       <Dialog
         open={confirmOpen}
